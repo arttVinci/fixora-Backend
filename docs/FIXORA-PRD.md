@@ -9,11 +9,19 @@
 
 ---
 
-## 1. Latar Belakang & Tujuan (Objective)
+## 1. Latar Belakang, Visi, Misi & Tujuan (Objective)
 
 Di kota-kota besar Indonesia seperti Jakarta dan Bekasi, masalah infrastruktur publik yang dibiarkan rusak dalam jangka waktu lama — jalan berlubang, jembatan rawan roboh, bangunan terbengkalai, sampah menumpuk, drainase tersumbat — adalah persoalan yang berulang dan jarang mendapat akuntabilitas jangka panjang. Platform pelaporan yang ada saat ini (Qlue, LAPOR!) sudah ada, namun memiliki dua kelemahan utama: Qlue sudah tidak terawat (domain resminya bahkan sudah dialihkan ke situs tidak relevan), sementara LAPOR! masih berjalan tapi teknologinya tertinggal dan modelnya bersifat "lapor sekali, selesai" tanpa mekanisme pelacakan durasi masalah dibiarkan.
 
 Fixora dibangun sebagai platform open source yang mengisi celah ini: bukan sekadar tempat lapor, tapi sistem **pelacakan akuntabilitas jangka panjang** terhadap infrastruktur yang mangkrak, didukung oleh AI yang secara aktif mencari data (bukan hanya menunggu laporan warga).
+
+**Visi:**
+
+Menjadi penyedia open data infrastruktur Indonesia yang terstruktur rapi berdasarkan wilayah — mencakup jenis infrastruktur, kondisi, hingga alokasi anggarannya — sehingga dapat dimanfaatkan secara bebas oleh publik, media, maupun pemerintah.
+
+**Misi:**
+
+Menciptakan platform transparansi infrastruktur di Indonesia dengan informasi yang jelas dan terverifikasi, menggunakan RAG untuk menghubungkan laporan masyarakat dengan data resmi pemerintah dan lokasi aktual di lapangan.
 
 **Tujuan utama:**
 
@@ -98,7 +106,7 @@ Buka aplikasi → Lihat peta → Filter berdasarkan kategori/durasi mangkrak
 
 ```
 Buka aplikasi → Cari wilayah spesifik → Lihat daftar titik mangkrak terlama
-→ Buka detail → Lihat cross-reference data SIRUP/APBD
+→ Buka detail → Lihat cross-reference data anggaran pemerintah (SatuData Jakarta atau sumber terbuka sejenis)
 → Ekspor/screenshot data sebagai bahan liputan
 ```
 
@@ -183,7 +191,7 @@ Cron job jalan berkala → Tarik berita dari RSS/NewsAPI
 ### 5.3 Fitur Lanjutan (Fase 2+, referensi — lihat Out of Scope)
 
 - Multi-agent verification (Classifier vs Verifier)
-- RAG cross-reference SIRUP/APBD
+- RAG cross-reference data anggaran pemerintah (SatuData Jakarta atau sumber terbuka sejenis)
 - Predictive risk scoring
 - Agentic workflow otomatis (generate surat pengaduan)
 - Satellite imagery change detection
@@ -213,7 +221,7 @@ _Catatan: angka target di atas adalah baseline awal dan dapat disesuaikan setela
 Fitur/ide berikut **tidak** akan dikerjakan pada fase rilis MVP, untuk mencegah scope creep:
 
 1. **Multi-Agent Verification kompleks** (lebih dari 2 agent, sistem debate/consensus) — MVP hanya menggunakan 1 lapis klasifikasi + validasi dasar (bukan multi-agent penuh)
-2. **RAG cross-reference SIRUP/APBD** — membutuhkan effort besar untuk data cleaning; ditunda ke Fase 2 setelah fondasi platform stabil. _Catatan: pengambilan raw data SIRUP/APBD (open government data) bisa dimulai lebih awal sebagai referensi manual/statis, namun pipeline RAG penuh (chunking, embedding, vector DB, retrieval otomatis) tetap masuk Fase 2, bukan MVP._
+2. **RAG cross-reference data anggaran pemerintah (SatuData Jakarta atau sumber terbuka sejenis)** — membutuhkan effort besar untuk data cleaning; ditunda ke Fase 2 setelah fondasi platform stabil. _Catatan: pengambilan raw data anggaran pemerintah (open government data) bisa dimulai lebih awal sebagai referensi manual/statis, namun pipeline RAG penuh (chunking, embedding, vector DB, retrieval otomatis) tetap masuk Fase 2, bukan MVP._
 3. **Predictive Risk Scoring (forecasting ML)** — membutuhkan dataset historis yang belum tersedia; ditunda ke Fase 3
 4. **Satellite/Aerial Imagery Analysis** — kompleksitas & kebutuhan expertise GIS terlalu tinggi untuk MVP; bersifat opsional jangka panjang
 5. **Agentic Workflow otomatis** (auto-generate surat pengaduan, notifikasi ke instansi) — ditunda hingga sistem verifikasi dasar terbukti akurat
