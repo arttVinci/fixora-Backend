@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  fixora_be:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fixora_be
+    restart: unless-stopped
+    depends_on:
+      - fixora_mysql
+    ports:
+      - "8080:8080"
+    networks:
+      - fixora_network
+    volumes:
+      - ./config.json:/app/config.json
+
+  fixora_mysql:
+    image: mysql:8.0
+    container_name: fixora_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "${DB_PORT_EXTERNAL}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - fixora_network
+
+networks:
+  fixora_network:
+    driver: bridge
+
+volumes:
+  mysql_data:
