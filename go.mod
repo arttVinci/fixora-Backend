@@ -5,7 +5,7 @@ go 1.25.3
 require (
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/gofiber/fiber/v2 v2.52.14
-	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/mmcdole/gofeed v1.4.0
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/viper v1.21.0
 	github.com/swaggo/fiber-swagger v1.3.0
@@ -13,11 +13,7 @@ require (
 	gorm.io/gorm v1.30.0
 )
 
-require (
-	github.com/mmcdole/gofeed v1.4.0 // indirect
-	github.com/mmcdole/goxpp/v2 v2.0.0 // indirect
-	github.com/robfig/cron/v3 v3.0.1 // indirect
-)
+require github.com/mmcdole/goxpp/v2 v2.0.0 // indirect
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
@@ -59,7 +55,7 @@ require (
 	github.com/valyala/fasthttp v1.51.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.53.0
+	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/mod v0.36.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect
