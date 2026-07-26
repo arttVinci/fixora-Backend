@@ -98,7 +98,7 @@ func (r *ReportRepository) FilterMap(request *model.SearchReportMapRequest) func
 func (r *ReportRepository) FilterList(request *model.SearchReportListRequest) func(tx *gorm.DB) *gorm.DB {
 	return func(tx *gorm.DB) *gorm.DB {
 		if request.Title != "" {
-			tx = tx.Where("title ILIKE ?", "%"+request.Title+"%")
+			tx = tx.Where("title LIKE ?", "%"+request.Title+"%")
 		}
 		if len(request.CategoryID) > 0 {
 			tx = tx.Where("category_id IN ?", request.CategoryID)
