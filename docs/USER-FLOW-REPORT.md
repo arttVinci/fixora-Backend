@@ -90,6 +90,32 @@ Pelaporan di Fixora dirancang **minim hambatan (frictionless)**. User tidak lang
 
 ---
 
+### Fase 7 — Background: RAG Cross-Reference Anggaran (Async)
+
+> **Penting:** Fase ini **tidak terlihat oleh user** dan **tidak menghalangi chat flow**. Proses ini berjalan secara asinkron di background setelah laporan tersimpan ke database. RAG ini adalah pipeline terpisah dari flow chat (News Crawler + CV Classifier + Multi-Agent), dan dibangun secara paralel sebagai fitur tersendiri.
+
+**Kenapa RAG bukan bagian dari chat flow?**
+- Memanggil LLM untuk RAG (retrieval + synthesis) makan waktu — memaksa user menunggu hanya untuk submit laporan itu tidak masuk akal.
+- Hasil RAG bukan sesuatu yang perlu dikonfirmasi user (berbeda dengan CV Classifier yang butuh human-in-the-loop).
+- Hasil RAG adalah informasi tambahan yang ditampilkan nanti saat siapa pun membuka detail laporan di peta.
+
+**Alur background:**
+
+| Step | Proses | Detail |
+|------|--------|--------|
+| BG-1 | Trigger otomatis | Setelah laporan tersimpan ke DB, sistem men-trigger `CrossReferenceBudget(reportID)` secara async |
+| BG-2 | Retrieval | Query ke Qdrant (vector DB) untuk mencari data anggaran pemerintah yang relevan dengan lokasi dan kategori laporan |
+| BG-3 | LLM Synthesis | Kandidat hasil retrieval di-synthesize oleh LLM menjadi ringkasan |
+| BG-4 | Simpan hasil | Hasil disimpan ke `reports.budget_info` — jika ada kandidat relevan, diisi ringkasan; jika tidak ada, diisi *"Tidak ditemukan data anggaran terkait"* |
+
+**Kapan user melihat hasilnya?**
+
+Saat **siapa pun** (pelapor, pemantau, jurnalis) membuka detail laporan di peta, panel detail akan menampilkan:
+- Info Anggaran: *[hasil RAG]* — jika ditemukan data relevan
+- *"Tidak ditemukan data anggaran terkait"* — jika tidak ada kecocokan
+
+---
+
 ## Ringkasan Mapping ke Backend
 
 | Fase | Endpoint / Proses Backend | Tabel Terkait |
@@ -100,11 +126,12 @@ Pelaporan di Fixora dirancang **minim hambatan (frictionless)**. User tidak lang
 | Fase 6 (Submit Laporan) | `POST /api/v1/reports` | `reports`, `report_photos`, `reporters` |
 | Fase 6 (Kirim Email) | Background job / queue | — |
 | Post-submit (Verifikasi) | Internal / cron | `reports` (update status) |
+| Fase 7 (RAG Anggaran) | Background async trigger | `reports` (update `budget_info`), `budget_items` (source data) |
 
 ---
 
 ## Catatan Desain
 
-- **Warna kuning (⚙️)** pada flowchart asli menandai proses backend/AI yang berjalan di belakang layar.
-- **Warna biru** menandai respons Asisten AI yang ditampilkan ke user.
-- Flow ini selaras dengan **US-02 (Pelaporan Manual)**, **US-04 (Konfirmasi Status)**, dan **US-06 (CV Classifier)** di PRD.
+- Flow chat (Fase 1–6) adalah pipeline yang **user lihat dan interaksi langsung**. Selesai di step 22.
+- Fase 7 (RAG) adalah pipeline **terpisah yang jalan di background** — user tidak melihat prosesnya, hanya melihat hasilnya nanti di detail laporan.
+- Flow ini selaras dengan **US-02 (Pelaporan Manual)**, **US-04 (Konfirmasi Status)**, **US-06 (CV Classifier)**, dan **US-08 (Cross-Reference Anggaran)** di PRD.
