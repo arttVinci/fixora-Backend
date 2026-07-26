@@ -1,66 +1,55 @@
-# Fixora — Database Schema Design
+# Fixora — Database Schema (Final)
 
-> **Scope awal:** DKI Jakarta  
-> **Database:** PostgreSQL  
-> **Total tabel:** 8
+> **Scope awal:** DKI Jakarta
+> **Database:** PostgreSQL
+> **Total tabel:** 13
+
+Dokumen ini adalah hasil gabungan dari rancangan region hierarchy & categories lookup (yang sudah baik), dikoreksi dan dilengkapi agar selaras penuh dengan PRD — termasuk tracking konfirmasi (US-04), pelapor (US-02), sumber data pemerintah (US-08), dan pipeline RAG.
 
 ---
 
 ## 1. Wilayah (Region Tables)
 
-Hierarki administratif Indonesia: Provinsi → Kota/Kabupaten → Kecamatan → Kelurahan.  
-Data di-seed manual untuk DKI Jakarta (1 provinsi, 6 kota, ~44 kecamatan, ~267 kelurahan).
-
----
+Hierarki administratif Indonesia: Provinsi → Kota/Kabupaten → Kecamatan → Kelurahan. Kode BPS di tiap level memungkinkan pencocokan langsung (JOIN) dengan dataset pemerintah lain yang juga pakai kode wilayah standar — mengurangi beban pada RAG untuk kasus yang bisa dicocokkan secara eksak.
 
 ### `provinces`
 
-| Field | Type | Constraint | Penjelasan |
-|---|---|---|---|
-| `id` | `UUID` | PK, default `gen_random_uuid()` | Primary key unik untuk setiap provinsi |
-| `name` | `VARCHAR(100)` | NOT NULL | Nama provinsi, contoh: `"DKI Jakarta"` |
-| `code` | `VARCHAR(10)` | NOT NULL, UNIQUE | Kode administratif BPS, contoh: `"31"` untuk DKI Jakarta. Berguna untuk integrasi data pemerintah di masa depan |
-| `created_at` | `TIMESTAMPTZ` | NOT NULL, default `NOW()` | Waktu record dibuat |
-| `updated_at` | `TIMESTAMPTZ` | NOT NULL, default `NOW()` | Waktu record terakhir diupdate |
-
----
+| Field                       | Type           | Constraint                      | Penjelasan               |
+| --------------------------- | -------------- | ------------------------------- | ------------------------ |
+| `id`                        | `UUID`         | PK, default `gen_random_uuid()` |                          |
+| `name`                      | `VARCHAR(100)` | NOT NULL                        | Contoh: `"DKI Jakarta"`  |
+| `code`                      | `VARCHAR(10)`  | NOT NULL, UNIQUE                | Kode BPS, contoh: `"31"` |
+| `created_at` / `updated_at` | `TIMESTAMPTZ`  | NOT NULL, default `NOW()`       |                          |
 
 ### `cities`
 
-| Field | Type | Constraint | Penjelasan |
-|---|---|---|---|
-| `id` | `UUID` | PK | Primary key unik untuk setiap kota/kabupaten |
-| `province_id` | `UUID` | FK → `provinces.id`, NOT NULL | Relasi ke provinsi induk |
-| `name` | `VARCHAR(100)` | NOT NULL | Nama kota/kabupaten, contoh: `"Jakarta Selatan"`, `"Kepulauan Seribu"` |
-| `code` | `VARCHAR(10)` | NOT NULL, UNIQUE | Kode BPS kota, contoh: `"31.74"` untuk Jakarta Selatan |
-| `created_at` | `TIMESTAMPTZ` | NOT NULL, default `NOW()` | Waktu record dibuat |
-| `updated_at` | `TIMESTAMPTZ` | NOT NULL, default `NOW()` | Waktu record terakhir diupdate |
-
----
+| Field                       | Type           | Constraint                    | Penjelasan                  |
+| --------------------------- | -------------- | ----------------------------- | --------------------------- |
+| `id`                        | `UUID`         | PK                            |                             |
+| `province_id`               | `UUID`         | FK → `provinces.id`, NOT NULL |                             |
+| `name`                      | `VARCHAR(100)` | NOT NULL                      | Contoh: `"Jakarta Selatan"` |
+| `code`                      | `VARCHAR(10)`  | NOT NULL, UNIQUE              | Contoh: `"31.74"`           |
+| `created_at` / `updated_at` | `TIMESTAMPTZ`  | NOT NULL, default `NOW()`     |                             |
 
 ### `districts`
 
-| Field | Type | Constraint | Penjelasan |
-|---|---|---|---|
-| `id` | `UUID` | PK | Primary key unik untuk setiap kecamatan |
-| `city_id` | `UUID` | FK → `cities.id`, NOT NULL | Relasi ke kota/kabupaten induk |
-| `name` | `VARCHAR(100)` | NOT NULL | Nama kecamatan, contoh: `"Tebet"`, `"Kebayoran Baru"` |
-| `code` | `VARCHAR(15)` | NOT NULL, UNIQUE | Kode BPS kecamatan, contoh: `"31.74.05"` untuk Tebet |
-| `created_at` | `TIMESTAMPTZ` | NOT NULL, default `NOW()` | Waktu record dibuat |
-| `updated_at` | `TIMESTAMPTZ` | NOT NULL, default `NOW()` | Waktu record terakhir diupdate |
-
----
+| Field                       | Type           | Constraint                 | Penjelasan           |
+| --------------------------- | -------------- | -------------------------- | -------------------- |
+| `id`                        | `UUID`         | PK                         |                      |
+| `city_id`                   | `UUID`         | FK → `cities.id`, NOT NULL |                      |
+| `name`                      | `VARCHAR(100)` | NOT NULL                   | Contoh: `"Tebet"`    |
+| `code`                      | `VARCHAR(15)`  | NOT NULL, UNIQUE           | Contoh: `"31.74.05"` |
+| `created_at` / `updated_at` | `TIMESTAMPTZ`  | NOT NULL, default `NOW()`  |                      |
 
 ### `villages`
 
-| Field | Type | Constraint | Penjelasan |
-|---|---|---|---|
-| `id` | `UUID` | PK | Primary key unik untuk setiap kelurahan |
-| `district_id` | `UUID` | FK → `districts.id`, NOT NULL | Relasi ke kecamatan induk |
-| `name` | `VARCHAR(100)` | NOT NULL | Nama kelurahan, contoh: `"Menteng Dalam"`, `"Bukit Duri"` |
-| `code` | `VARCHAR(20)` | NOT NULL, UNIQUE | Kode BPS kelurahan, contoh: `"31.74.05.1003"` untuk Menteng Dalam |
-| `created_at` | `TIMESTAMPTZ` | NOT NULL, default `NOW()` | Waktu record dibuat |
-| `updated_at` | `TIMESTAMPTZ` | NOT NULL, default `NOW()` | Waktu record terakhir diupdate |
+| Field                       | Type           | Constraint                    | Penjelasan                |
+| --------------------------- | -------------- | ----------------------------- | ------------------------- |
+| `id`                        | `UUID`         | PK                            |                           |
+| `district_id`               | `UUID`         | FK → `districts.id`, NOT NULL |                           |
+| `name`                      | `VARCHAR(100)` | NOT NULL                      | Contoh: `"Menteng Dalam"` |
+| `code`                      | `VARCHAR(20)`  | NOT NULL, UNIQUE              | Contoh: `"31.74.05.1003"` |
+| `created_at` / `updated_at` | `TIMESTAMPTZ`  | NOT NULL, default `NOW()`     |                           |
 
 ---
 
@@ -68,95 +57,193 @@ Data di-seed manual untuk DKI Jakarta (1 provinsi, 6 kota, ~44 kecamatan, ~267 k
 
 ### `categories`
 
-Lookup table untuk jenis masalah infrastruktur. Data awal: jalan rusak, jembatan, sampah, bangunan terbengkalai, drainase.
+Lookup table jenis masalah infrastruktur (jalan rusak, jembatan, sampah, bangunan terbengkalai, drainase).
 
-| Field | Type | Constraint | Penjelasan |
-|---|---|---|---|
-| `id` | `UUID` | PK | Primary key unik untuk setiap kategori |
-| `name` | `VARCHAR(50)` | NOT NULL, UNIQUE | Nama kategori yang ditampilkan ke user, contoh: `"Jalan Rusak"`, `"Drainase Tersumbat"` |
-| `slug` | `VARCHAR(50)` | NOT NULL, UNIQUE | Versi URL-friendly dari nama, contoh: `"jalan-rusak"`, `"drainase-tersumbat"`. Dipakai untuk filter query parameter di API & URL frontend |
-| `icon` | `VARCHAR(50)` | NULLABLE | Nama/kode icon untuk marker di peta, contoh: `"road-crack"`, `"bridge"`. Biar frontend tahu icon mana yang ditampilkan per kategori |
-| `color` | `VARCHAR(7)` | NULLABLE | Hex color code untuk warna marker di peta, contoh: `"#E53E3E"` (merah untuk jalan rusak). Biar setiap kategori punya warna berbeda dan mudah dibedakan secara visual |
-| `created_at` | `TIMESTAMPTZ` | NOT NULL, default `NOW()` | Waktu record dibuat |
-| `updated_at` | `TIMESTAMPTZ` | NOT NULL, default `NOW()` | Waktu record terakhir diupdate |
+| Field                       | Type          | Constraint                | Penjelasan                                               |
+| --------------------------- | ------------- | ------------------------- | -------------------------------------------------------- |
+| `id`                        | `UUID`        | PK                        |                                                          |
+| `name`                      | `VARCHAR(50)` | NOT NULL, UNIQUE          | Contoh: `"Jalan Rusak"`                                  |
+| `slug`                      | `VARCHAR(50)` | NOT NULL, UNIQUE          | Contoh: `"jalan-rusak"`, dipakai untuk filter di URL/API |
+| `created_at` / `updated_at` | `TIMESTAMPTZ` | NOT NULL, default `NOW()` |                                                          |
 
 ---
 
-## 3. Report (Entitas Utama)
+## 3. Pelapor _(baru ditambahkan)_
+
+### `reporters`
+
+Menyimpan identitas pelapor secara ternormalisasi — 1 orang bisa mengirim banyak laporan. Nama disimpan untuk keperluan internal (verifikasi/follow-up), **tidak ditampilkan publik** di peta sesuai kesepakatan sebelumnya.
+
+| Field        | Type           | Constraint                | Penjelasan                      |
+| ------------ | -------------- | ------------------------- | ------------------------------- |
+| `id`         | `UUID`         | PK                        |                                 |
+| `name`       | `VARCHAR(150)` | NOT NULL                  | Nama pelapor, internal-only     |
+| `email`      | `VARCHAR(150)` | NOT NULL                  | Untuk notifikasi status laporan |
+| `created_at` | `TIMESTAMPTZ`  | NOT NULL, default `NOW()` |                                 |
+
+---
+
+## 4. Report (Entitas Utama)
 
 ### `reports`
 
-Tabel inti Fixora — setiap row merepresentasikan **satu titik masalah infrastruktur** di peta, baik dari laporan warga maupun hasil deteksi AI news crawler.
+Satu row = satu titik masalah infrastruktur di peta, dari sumber apa pun (warga, AI news, atau data resmi pemerintah).
 
-| Field | Type | Constraint | Penjelasan |
-|---|---|---|---|
-| `id` | `UUID` | PK | Primary key unik untuk setiap laporan |
-| `category_id` | `UUID` | FK → `categories.id`, NOT NULL | Kategori masalah (jalan rusak, sampah, dll). Di-set manual oleh pelapor atau otomatis oleh AI (CV classifier / news extraction) |
-| `village_id` | `UUID` | FK → `villages.id`, NOT NULL | Kelurahan tempat masalah berada. Level paling detail dari hierarki wilayah — dari sini bisa di-trace naik ke kecamatan → kota → provinsi lewat JOIN |
-| `title` | `VARCHAR(200)` | NOT NULL | Judul singkat laporan, contoh: `"Jalan Berlubang di Jl. Casablanca"`. Bisa diisi manual oleh pelapor atau auto-generated oleh AI dari konteks berita |
-| `description` | `TEXT` | NULLABLE | Deskripsi detail masalah (opsional sesuai PRD). Pelapor boleh kosongkan, foto yang wajib |
-| `latitude` | `DECIMAL(10,8)` | NOT NULL | Koordinat GPS latitude titik masalah. Dipakai untuk menampilkan marker di peta. Contoh: `-6.23456789` |
-| `longitude` | `DECIMAL(11,8)` | NOT NULL | Koordinat GPS longitude titik masalah. Contoh: `106.84567890` |
-| `address` | `VARCHAR(500)` | NULLABLE | Alamat lengkap dalam format teks yang human-readable, contoh: `"Jl. Casablanca Raya No. 12, Menteng Dalam, Tebet"`. Bisa di-resolve dari koordinat GPS via reverse geocoding, atau diisi manual |
-| `severity` | `SMALLINT` | NOT NULL, CHECK (1–5) | Skor keparahan masalah (1 = ringan, 5 = kritis). Di-set otomatis oleh CV classifier saat foto diupload, atau oleh LLM saat parsing berita. Dipakai untuk prioritas sorting & filter di peta |
-| `status` | `VARCHAR(25)` | NOT NULL, default `'pending_verification'` | Status lifecycle laporan. Nilai yang mungkin: `pending_verification` (baru masuk, belum divalidasi), `verified` (sudah lolos validasi), `mangkrak` (terverifikasi masih rusak/terbengkalai), `dalam_perbaikan` (ada indikasi sedang diperbaiki), `selesai` (masalah sudah teratasi) |
-| `source_type` | `VARCHAR(15)` | NOT NULL | Asal-usul data laporan. Nilai: `user_report` (dilaporkan langsung oleh warga via form) atau `ai_news` (terdeteksi otomatis oleh AI news crawler dari media). Ditampilkan sebagai badge di UI untuk transparansi |
-| `perceptual_hash` | `VARCHAR(64)` | NULLABLE | Hash dari foto utama laporan, dihasilkan oleh algoritma perceptual hashing (bukan hash kriptografis). Dipakai untuk deteksi duplikat — dua foto yang secara visual mirip akan menghasilkan hash yang mirip, meskipun resolusi/kompresi berbeda |
-| `merged_into_id` | `UUID` | FK → `reports.id`, NULLABLE | Jika laporan ini terdeteksi sebagai duplikat dan di-merge ke laporan lain, field ini menunjuk ke ID laporan induk. Laporan yang sudah di-merge tidak ditampilkan di peta (soft-merge), tapi datanya tetap tersimpan |
-| `first_reported_at` | `TIMESTAMPTZ` | NOT NULL | Tanggal pertama kali masalah ini dilaporkan/terdeteksi. Ini yang jadi acuan menghitung **"sudah berapa lama masalah dibiarkan"** — fitur kunci diferensiasi Fixora |
-| `created_at` | `TIMESTAMPTZ` | NOT NULL, default `NOW()` | Waktu record dibuat di database |
-| `updated_at` | `TIMESTAMPTZ` | NOT NULL, default `NOW()` | Waktu record terakhir dimodifikasi |
+| Field                       | Type            | Constraint                                  | Penjelasan                                                                     |
+| --------------------------- | --------------- | ------------------------------------------- | ------------------------------------------------------------------------------ |
+| `id`                        | `UUID`          | PK                                          |                                                                                |
+| `reporter_id`               | `UUID`          | FK → `reporters.id`, NULLABLE               | **Baru.** Null jika sumbernya `ai_news` atau `gov_data`                        |
+| `category_id`               | `UUID`          | FK → `categories.id`, NOT NULL              |                                                                                |
+| `village_id`                | `UUID`          | FK → `villages.id`, NOT NULL                |                                                                                |
+| `title`                     | `VARCHAR(200)`  | NOT NULL                                    |                                                                                |
+| `description`               | `TEXT`          | NULLABLE                                    |                                                                                |
+| `latitude`                  | `DECIMAL(10,8)` | NOT NULL                                    |                                                                                |
+| `longitude`                 | `DECIMAL(11,8)` | NOT NULL                                    |                                                                                |
+| `address`                   | `VARCHAR(500)`  | NULLABLE                                    |                                                                                |
+| `severity`                  | `VARCHAR(10)`   | NOT NULL, CHECK (`ringan`,`sedang`,`parah`) | **Dikoreksi** dari `SMALLINT 1–5` menjadi 3 level, selaras dengan US-06 di PRD |
+| `status`                    | `VARCHAR(25)`   | NOT NULL, default `'pending_verification'`  | `pending_verification`, `verified`, `mangkrak`, `dalam_perbaikan`, `selesai`   |
+| `source_type`               | `VARCHAR(15)`   | NOT NULL                                    | **Dikoreksi:** `user_report`, `ai_news`, atau `gov_data` (US-08 ditambahkan)   |
+| `merged_into_id`            | `UUID`          | FK → `reports.id`, NULLABLE                 | Soft-merge duplikat, alasannya dicatat di `merge_logs`                         |
+| `confidence_score`          | `FLOAT`         | NOT NULL, default `1.0`                     | **Baru.** Untuk US-04, menurun seiring waktu sejak `last_confirmed_at`         |
+| `budget_info`               | `TEXT`          | NULLABLE                                    | **Baru.** Hasil kesimpulan RAG (Fase 2)                                        |
+| `first_reported_at`         | `TIMESTAMPTZ`   | NOT NULL                                    | Acuan hitung durasi mangkrak                                                   |
+| `last_confirmed_at`         | `TIMESTAMPTZ`   | NULLABLE                                    | **Baru.** Update tiap ada konfirmasi "masih begini"                            |
+| `created_at` / `updated_at` | `TIMESTAMPTZ`   | NOT NULL, default `NOW()`                   |                                                                                |
+
+> **Catatan:** field `perceptual_hash` yang sebelumnya ada di tabel ini **dihapus** — sudah tersedia di `report_photos.perceptual_hash` (foto primary), sehingga tidak perlu disimpan dobel di dua tempat.
 
 **Index yang direkomendasikan:**
+
 - `(latitude, longitude)` — spatial query untuk peta
-- `(category_id)` — filter by kategori
-- `(village_id)` — filter by wilayah
-- `(status)` — filter by status
-- `(source_type)` — filter by sumber data
+- `(category_id)`, `(village_id)`, `(status)`, `(source_type)` — filter
+- `(first_reported_at)` — sorting berdasarkan durasi mangkrak
 
 ---
 
-## 4. Foto Laporan
+## 5. Foto Laporan
 
 ### `report_photos`
 
-Satu laporan bisa punya lebih dari satu foto. Foto pertama (primary) dipakai sebagai thumbnail di peta & untuk perceptual hashing.
+Satu laporan bisa punya banyak foto. Foto primary dipakai sebagai thumbnail & sumber perceptual hash utama.
 
-| Field | Type | Constraint | Penjelasan |
-|---|---|---|---|
-| `id` | `UUID` | PK | Primary key unik untuk setiap foto |
-| `report_id` | `UUID` | FK → `reports.id`, NOT NULL, ON DELETE CASCADE | Relasi ke laporan induk. Cascade delete — kalau report dihapus, foto ikut terhapus |
-| `photo_url` | `VARCHAR(500)` | NOT NULL | URL/path ke file foto yang tersimpan di object storage (S3, MinIO, dll). Contoh: `"uploads/reports/abc123/photo1.jpg"` |
-| `is_primary` | `BOOLEAN` | NOT NULL, default `false` | Menandai apakah foto ini adalah foto utama. Foto utama ditampilkan sebagai thumbnail di daftar/marker peta, dan dipakai untuk generate perceptual hash |
-| `perceptual_hash` | `VARCHAR(64)` | NULLABLE | Hash perceptual dari foto ini. Dipakai untuk mendeteksi apakah foto yang sama/mirip sudah pernah diupload di laporan lain (deteksi duplikat cross-report) |
-| `created_at` | `TIMESTAMPTZ` | NOT NULL, default `NOW()` | Waktu foto diupload |
+| Field             | Type           | Constraint                                     | Penjelasan                          |
+| ----------------- | -------------- | ---------------------------------------------- | ----------------------------------- |
+| `id`              | `UUID`         | PK                                             |                                     |
+| `report_id`       | `UUID`         | FK → `reports.id`, NOT NULL, ON DELETE CASCADE |                                     |
+| `photo_url`       | `VARCHAR(500)` | NOT NULL                                       |                                     |
+| `is_primary`      | `BOOLEAN`      | NOT NULL, default `false`                      |                                     |
+| `perceptual_hash` | `VARCHAR(64)`  | NULLABLE                                       | Untuk deteksi duplikat cross-report |
+| `created_at`      | `TIMESTAMPTZ`  | NOT NULL, default `NOW()`                      |                                     |
 
 ---
 
-## 5. AI News Crawler
+## 6. Konfirmasi Laporan _(baru ditambahkan — US-04)_
+
+### `report_confirmations`
+
+Log setiap kali warga mengonfirmasi "masih begini" pada suatu laporan. Dipisah dari `reports` agar histori konfirmasi tidak hilang dan bisa dihitung frekuensinya.
+
+| Field             | Type          | Constraint                                     | Penjelasan                                   |
+| ----------------- | ------------- | ---------------------------------------------- | -------------------------------------------- |
+| `id`              | `UUID`        | PK                                             |                                              |
+| `report_id`       | `UUID`        | FK → `reports.id`, NOT NULL, ON DELETE CASCADE |                                              |
+| `confirmed_by_ip` | `VARCHAR(45)` | NULLABLE                                       | Anti-spam ringan (laporan tidak wajib login) |
+| `confirmed_at`    | `TIMESTAMPTZ` | NOT NULL, default `NOW()`                      |                                              |
+
+---
+
+## 7. Audit Trail Duplikat _(baru ditambahkan)_
+
+### `merge_logs`
+
+Mencatat alasan & skor kemiripan saat dua laporan digabungkan (US-07), agar keputusan sistem bisa diaudit — melengkapi `reports.merged_into_id` yang sifatnya cuma pointer tanpa konteks.
+
+| Field                    | Type          | Constraint                  | Penjelasan                                   |
+| ------------------------ | ------------- | --------------------------- | -------------------------------------------- |
+| `id`                     | `UUID`        | PK                          |                                              |
+| `report_id`              | `UUID`        | FK → `reports.id`, NOT NULL | Laporan yang di-merge                        |
+| `duplicate_of_report_id` | `UUID`        | FK → `reports.id`, NOT NULL | Laporan induk                                |
+| `reason`                 | `VARCHAR(50)` | NOT NULL                    | `foto_identik`, `radius_lokasi_dekat`, dll   |
+| `similarity_score`       | `FLOAT`       | NOT NULL                    | Skor dari perceptual hash / jarak geospasial |
+| `created_at`             | `TIMESTAMPTZ` | NOT NULL, default `NOW()`   |                                              |
+
+---
+
+## 8. AI News Crawler
 
 ### `crawled_articles`
 
-Menyimpan artikel berita yang ditarik oleh AI news crawler. Setiap artikel melewati proses: **crawl → LLM extraction → validasi → (opsional) jadi report**.
+Artikel berita yang ditarik AI news crawler, melewati proses: crawl → LLM extraction → validasi → (opsional) jadi report.
 
-| Field | Type | Constraint | Penjelasan |
-|---|---|---|---|
-| `id` | `UUID` | PK | Primary key unik untuk setiap artikel |
-| `url` | `VARCHAR(1000)` | NOT NULL, UNIQUE | URL asli artikel berita. Di-set UNIQUE untuk mencegah crawling artikel yang sama berulang kali |
-| `title` | `VARCHAR(500)` | NOT NULL | Judul artikel berita asli dari sumber media |
-| `content` | `TEXT` | NULLABLE | Isi/ringkasan artikel. Disimpan untuk keperluan audit trail & re-processing jika LLM extraction pertama gagal atau kurang akurat |
-| `source_name` | `VARCHAR(100)` | NOT NULL | Nama media sumber, contoh: `"Detik.com"`, `"Kompas"`, `"Tempo"`. Ditampilkan di UI sebagai bagian dari badge "Sumber: Media (Detik.com)" |
-| `extracted_location` | `TEXT` | NULLABLE | Lokasi yang diekstrak oleh LLM dari teks berita dalam bentuk teks mentah, contoh: `"Jl. Gatot Subroto, Jakarta Selatan"`. Ini hasil mentah sebelum di-geocode jadi koordinat |
-| `extracted_category_id` | `UUID` | FK → `categories.id`, NULLABLE | Kategori masalah yang diekstrak oleh LLM. Nullable karena LLM mungkin gagal menentukan kategori dari teks berita |
-| `extracted_severity` | `SMALLINT` | NULLABLE, CHECK (1–5) | Skor severity yang diestimasi LLM dari konteks berita. Nullable karena tidak semua berita bisa dinilai severity-nya |
-| `extracted_latitude` | `DECIMAL(10,8)` | NULLABLE | Latitude hasil geocoding dari `extracted_location`. Nullable karena geocoding bisa gagal |
-| `extracted_longitude` | `DECIMAL(11,8)` | NULLABLE | Longitude hasil geocoding dari `extracted_location` |
-| `status` | `VARCHAR(15)` | NOT NULL, default `'pending'` | Status processing artikel. Nilai: `pending` (baru di-crawl, belum diproses LLM), `processed` (sudah diekstrak & berhasil jadi report), `rejected` (diekstrak tapi tidak relevan/gagal validasi) |
-| `report_id` | `UUID` | FK → `reports.id`, NULLABLE | Link ke report yang di-generate dari artikel ini. Nullable karena tidak semua artikel berhasil jadi report (bisa rejected). Ini membentuk traceability: dari report bisa di-trace balik ke artikel aslinya |
-| `crawled_at` | `TIMESTAMPTZ` | NOT NULL | Waktu artikel di-crawl dari sumber media |
-| `processed_at` | `TIMESTAMPTZ` | NULLABLE | Waktu artikel selesai diproses oleh LLM. Nullable karena artikel yang masih `pending` belum diproses |
-| `created_at` | `TIMESTAMPTZ` | NOT NULL, default `NOW()` | Waktu record dibuat di database |
-| `updated_at` | `TIMESTAMPTZ` | NOT NULL, default `NOW()` | Waktu record terakhir dimodifikasi |
+| Field                       | Type            | Constraint                     | Penjelasan                                           |
+| --------------------------- | --------------- | ------------------------------ | ---------------------------------------------------- |
+| `id`                        | `UUID`          | PK                             |                                                      |
+| `url`                       | `VARCHAR(1000)` | NOT NULL, UNIQUE               | Kunci dedup — mencegah crawl ulang artikel yang sama |
+| `title`                     | `VARCHAR(500)`  | NOT NULL                       |                                                      |
+| `content`                   | `TEXT`          | NULLABLE                       | Untuk audit trail & re-processing                    |
+| `source_name`               | `VARCHAR(100)`  | NOT NULL                       | Contoh: `"Detik.com"`                                |
+| `extracted_location`        | `TEXT`          | NULLABLE                       | Lokasi mentah hasil ekstraksi LLM, sebelum geocoding |
+| `extracted_category_id`     | `UUID`          | FK → `categories.id`, NULLABLE |                                                      |
+| `extracted_severity`        | `VARCHAR(10)`   | NULLABLE                       | Diselaraskan ke `ringan`/`sedang`/`parah`            |
+| `extracted_latitude`        | `DECIMAL(10,8)` | NULLABLE                       |                                                      |
+| `extracted_longitude`       | `DECIMAL(11,8)` | NULLABLE                       |                                                      |
+| `status`                    | `VARCHAR(15)`   | NOT NULL, default `'pending'`  | `pending`, `processed`, `rejected`                   |
+| `report_id`                 | `UUID`          | FK → `reports.id`, NULLABLE    | Traceability ke report hasil ekstraksi               |
+| `crawled_at`                | `TIMESTAMPTZ`   | NOT NULL                       |                                                      |
+| `processed_at`              | `TIMESTAMPTZ`   | NULLABLE                       |                                                      |
+| `created_at` / `updated_at` | `TIMESTAMPTZ`   | NOT NULL, default `NOW()`      |                                                      |
+
+---
+
+## 9. Data Anggaran Pemerintah _(baru ditambahkan — RAG)_
+
+### `budget_items`
+
+Data anggaran dari portal open data pemerintah (prioritas: SatuData Jakarta), menjadi bahan pencarian RAG untuk cross-reference dengan `reports`.
+
+| Field           | Type           | Constraint                   | Penjelasan                                                                              |
+| --------------- | -------------- | ---------------------------- | --------------------------------------------------------------------------------------- |
+| `id`            | `UUID`         | PK                           |                                                                                         |
+| `village_id`    | `UUID`         | FK → `villages.id`, NULLABLE | Diisi jika berhasil dicocokkan ke kode wilayah standar (jalur JOIN langsung, tanpa RAG) |
+| `project_name`  | `VARCHAR(300)` | NOT NULL                     |                                                                                         |
+| `location_text` | `VARCHAR(500)` | NOT NULL                     | Teks lokasi mentah dari sumber data                                                     |
+| `budget_amount` | `BIGINT`       | NOT NULL                     | Dalam Rupiah                                                                            |
+| `year`          | `SMALLINT`     | NOT NULL                     |                                                                                         |
+| `agency`        | `VARCHAR(150)` | NULLABLE                     | Instansi pelaksana                                                                      |
+| `source`        | `VARCHAR(50)`  | NOT NULL                     | `satudata_jakarta`, `sirup`, `apbd`, dll — mendukung ekspansi sumber per wilayah        |
+| `vector_id`     | `VARCHAR(100)` | NULLABLE                     | Referensi ID di Qdrant untuk sinkronisasi ulang                                         |
+| `created_at`    | `TIMESTAMPTZ`  | NOT NULL, default `NOW()`    |                                                                                         |
+
+---
+
+## 10. Sinkronisasi Dataset Pemerintah _(baru ditambahkan — US-08)_
+
+### `gov_datasets_sync_log`
+
+Tracking sinkronisasi data dari portal pemerintah (kondisi infrastruktur & anggaran), agar tidak perlu menarik ulang seluruh data tiap kali proses berjalan.
+
+| Field            | Type           | Constraint                | Penjelasan                                                 |
+| ---------------- | -------------- | ------------------------- | ---------------------------------------------------------- | --- |
+| `id`             | `UUID`         | PK                        |                                                            |
+| `dataset_name`   | `VARCHAR(100)` | NOT NULL                  | Contoh: `"jalan_kondisi_jakarta"`                          |
+| `dataset_type`   | `VARCHAR(20)`  | NOT NULL                  | `condition` (→ `reports`) atau `budget` (→ `budget_items`) |
+| `last_synced_at` | `TIMESTAMPTZ`  | NOT NULL                  |                                                            |
+| `records_synced` | `INTEGER`      | NOT NULL, default `0`     |                                                            |
+| `status`         | `VARCHAR(15)`  | NOT NULL                  | `success`, `failed`                                        |     |
+| `created_at`     | `TIMESTAMPTZ`  | NOT NULL, default `NOW()` |                                                            |
+
+---
+
+## Ringkasan Perubahan dari Draft Sebelumnya
+
+| Perubahan            | Detail                                                                                              |
+| -------------------- | --------------------------------------------------------------------------------------------------- |
+| ➕ Ditambahkan       | `reporters`, `report_confirmations`, `merge_logs`, `budget_items`, `gov_datasets_sync_log`          |
+| ✏️ Dikoreksi         | `reports.severity`: `SMALLINT(1–5)` → `VARCHAR` 3 level (selaras US-06)                             |
+| ✏️ Dikoreksi         | `reports.source_type`: tambah nilai `gov_data` (selaras US-08)                                      |
+| ✏️ Dikoreksi         | `reports.perceptual_hash` dihapus (redundan dengan `report_photos.perceptual_hash`)                 |
+| ➕ Ditambahkan field | `reports.reporter_id`, `confidence_score`, `budget_info`, `last_confirmed_at`                       |
+| ✅ Dipertahankan     | Region hierarchy (`provinces`→`villages`), `categories` lookup, `report_photos`, `crawled_articles` |
 
 ---
 
@@ -167,43 +254,44 @@ erDiagram
     provinces ||--o{ cities : "has many"
     cities ||--o{ districts : "has many"
     districts ||--o{ villages : "has many"
-    
+
     categories ||--o{ reports : "classifies"
     villages ||--o{ reports : "located in"
-    
+    reporters ||--o{ reports : "submits"
+
     reports ||--o{ report_photos : "has many"
+    reports ||--o{ report_confirmations : "confirmed by"
     reports ||--o| reports : "merged into"
-    
+    reports ||--o{ merge_logs : "logged as"
+
     categories ||--o{ crawled_articles : "extracted as"
     reports ||--o| crawled_articles : "generated from"
-    
+
+    villages ||--o{ budget_items : "allocated to"
+
     provinces {
         uuid id PK
         varchar name
         varchar code
     }
-    
     cities {
         uuid id PK
         uuid province_id FK
         varchar name
         varchar code
     }
-    
     districts {
         uuid id PK
         uuid city_id FK
         varchar name
         varchar code
     }
-    
     villages {
         uuid id PK
         uuid district_id FK
         varchar name
         varchar code
     }
-    
     categories {
         uuid id PK
         varchar name
@@ -211,24 +299,29 @@ erDiagram
         varchar icon
         varchar color
     }
-    
+    reporters {
+        uuid id PK
+        varchar name
+        varchar email
+    }
     reports {
         uuid id PK
+        uuid reporter_id FK
         uuid category_id FK
         uuid village_id FK
         varchar title
         text description
         decimal latitude
         decimal longitude
-        varchar address
-        smallint severity
+        varchar severity
         varchar status
         varchar source_type
-        varchar perceptual_hash
         uuid merged_into_id FK
+        float confidence_score
+        text budget_info
         timestamptz first_reported_at
+        timestamptz last_confirmed_at
     }
-    
     report_photos {
         uuid id PK
         uuid report_id FK
@@ -236,21 +329,38 @@ erDiagram
         boolean is_primary
         varchar perceptual_hash
     }
-    
+    report_confirmations {
+        uuid id PK
+        uuid report_id FK
+        varchar confirmed_by_ip
+        timestamptz confirmed_at
+    }
+    merge_logs {
+        uuid id PK
+        uuid report_id FK
+        uuid duplicate_of_report_id FK
+        varchar reason
+        float similarity_score
+    }
     crawled_articles {
         uuid id PK
         varchar url
         varchar title
-        text content
         varchar source_name
         text extracted_location
         uuid extracted_category_id FK
-        smallint extracted_severity
-        decimal extracted_latitude
-        decimal extracted_longitude
+        varchar extracted_severity
         varchar status
         uuid report_id FK
-        timestamptz crawled_at
-        timestamptz processed_at
+    }
+    budget_items {
+        uuid id PK
+        uuid village_id FK
+        varchar project_name
+        varchar location_text
+        bigint budget_amount
+        smallint year
+        varchar source
+        varchar vector_id
     }
 ```
