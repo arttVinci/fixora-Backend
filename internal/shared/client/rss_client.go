@@ -48,9 +48,6 @@ func (c *rssClientImpl) FetchArticles(ctx context.Context, keyword string) ([]RS
 		}
 		
 		source := "Google News RSS"
-		if item.Source != nil && item.Source.Title != "" {
-			source = item.Source.Title
-		}
 		
 		articles = append(articles, RSSArticle{
 			Title:       item.Title,
