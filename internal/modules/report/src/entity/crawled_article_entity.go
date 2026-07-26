@@ -10,7 +10,7 @@ type CrawledArticle struct {
 	SourceName          string     `gorm:"column:source_name;type:varchar(100);not null"`
 	ExtractedLocation   *string    `gorm:"column:extracted_location;type:text"`
 	ExtractedCategoryID *string    `gorm:"column:extracted_category_id;type:varchar(36)"`
-	ExtractedSeverity   *int       `gorm:"column:extracted_severity;type:smallint"`
+	ExtractedSeverity   *string    `gorm:"column:extracted_severity;type:varchar(10)"`
 	ExtractedLatitude   *float64   `gorm:"column:extracted_latitude;type:decimal(10,8)"`
 	ExtractedLongitude  *float64   `gorm:"column:extracted_longitude;type:decimal(11,8)"`
 	Status              string     `gorm:"column:status;type:varchar(15);not null;default:'pending'"`

@@ -1,0 +1,20 @@
+package entity
+
+import "time"
+
+type MergeLog struct {
+	ID                  string     `gorm:"column:id;primaryKey;type:varchar(36)"`
+	ReportID            string     `gorm:"column:report_id;type:varchar(36);not null"`
+	DuplicateOfReportID string     `gorm:"column:duplicate_of_report_id;type:varchar(36);not null"`
+	Reason              string     `gorm:"column:reason;type:varchar(50);not null"`
+	SimilarityScore     float64    `gorm:"column:similarity_score;type:float;not null"`
+	CreatedAt           *time.Time `gorm:"column:created_at;autoCreateTime"`
+
+	// Relasi
+	Report            *Report `gorm:"foreignKey:ReportID;references:ID"`
+	DuplicateOfReport *Report `gorm:"foreignKey:DuplicateOfReportID;references:ID"`
+}
+
+func (MergeLog) TableName() string {
+	return "merge_logs"
+}
