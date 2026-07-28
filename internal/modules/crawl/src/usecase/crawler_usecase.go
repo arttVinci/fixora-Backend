@@ -69,7 +69,7 @@ func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *model.Proce
 	}
 
 	address := req.Geocode.Address
-	report := &report_entity.Report{
+	report := &report_client.ReportClientRequest{
 		CategoryID:      req.Extraction.CategoryID,
 		VillageID:       req.Geocode.VillageID,
 		Title:           req.Title,
@@ -84,13 +84,14 @@ func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *model.Proce
 		FirstReportedAt: &req.CrawledAt,
 	}
 	
-	if err := c.ReportClient.CreateReport(tx, report); err != nil {
+	reportRes, err := c.ReportClient.CreateReport(tx, report)
+	if err != nil {
 		c.Log.Warnf("Failed to create auto-report via client : %+v", err)
 		return fiber.NewError(fiber.StatusInternalServerError, "Gagal membuat laporan otomatis")
 	}
 
-	crawled.ReportID = &report.ID
-	if err := c.CrawledArticleRepository.UpdateStatusAndReportID(tx, crawled.ID, "processed", report.ID); err != nil {
+	crawled.ReportID = &reportRes.ID
+	if err := c.CrawledArticleRepository.UpdateStatusAndReportID(tx, crawled.ID, "processed", reportRes.ID); err != nil {
 		c.Log.Warnf("Failed to update crawled article relation : %+v", err)
 		return fiber.NewError(fiber.StatusInternalServerError, "Gagal mengaitkan artikel dengan laporan")
 	}
