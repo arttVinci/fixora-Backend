@@ -3,11 +3,10 @@ package usecase
 import (
 	"context"
 
-	crawl_entity "github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/entity"
-	crawl_model "github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/model"
-	crawl_repo "github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/repository"
-	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report/client"
-	report_entity "github.com/arttVinci/fixora-Backend/internal/modules/report/src/entity"
+	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/entity"
+	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/model"
+	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/repository"
+	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report-client"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
@@ -19,16 +18,16 @@ type CrawlerUseCase struct {
 	DB                       *gorm.DB
 	Log                      *logrus.Logger
 	Validate                 *validator.Validate
-	CrawledArticleRepository *crawl_repo.CrawledRepository
-	ReportClient             report_client.ReportClient
+	CrawledArticleRepository *repository.CrawledRepository
+	ReportClient             report_client.Client
 }
 
 func NewCrawlerUseCase(
 	db *gorm.DB,
 	log *logrus.Logger,
 	validate *validator.Validate,
-	crawledRepo *crawl_repo.CrawledRepository,
-	reportClient report_client.ReportClient,
+	crawledRepo *repository.CrawledRepository,
+	reportClient  report_client.Client,
 ) *CrawlerUseCase {
 	return &CrawlerUseCase{
 		DB:                       db,
@@ -40,17 +39,17 @@ func NewCrawlerUseCase(
 }
 
 func (c *CrawlerUseCase) IsArticleProcessed(ctx context.Context, url string) bool {
-	article := new(crawl_entity.CrawledArticle)
+	article := new(entity.CrawledArticle)
 	err := c.CrawledArticleRepository.FindByURL(c.DB.WithContext(ctx), article, url)
 	return err == nil && article.ID != ""
 }
 
-func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *crawl_model.ProcessCrawledArticleRequest) error {
+func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *model.ProcessCrawledArticleRequest) error {
 	tx := c.DB.WithContext(ctx).Begin()
 	defer tx.Rollback()
 
 	content := req.Content
-	crawled := &crawl_entity.CrawledArticle{
+	crawled := &entity.CrawledArticle{
 		URL:                 req.URL,
 		Title:               req.Title,
 		Content:             &content,
