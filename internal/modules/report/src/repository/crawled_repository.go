@@ -7,22 +7,22 @@ import (
 	"gorm.io/gorm"
 )
 
-type CrawledArticleRepository struct {
+type CrawledRepository struct {
 	shared_repo.Repository[entity.CrawledArticle]
 	Log *logrus.Logger
 }
 
-func NewCrawledArticleRepository(log *logrus.Logger) *CrawledArticleRepository {
-	return &CrawledArticleRepository{
+func NewCrawledRepository(log *logrus.Logger) *CrawledRepository {
+	return &CrawledRepository{
 		Log: log,
 	}
 }
 
-func (r *CrawledArticleRepository) FindByURL(db *gorm.DB, article *entity.CrawledArticle, url string) error {
+func (r *CrawledRepository) FindByURL(db *gorm.DB, article *entity.CrawledArticle, url string) error {
 	return db.Where("url = ?", url).First(article).Error
 }
 
-func (r *CrawledArticleRepository) UpdateStatusAndReportID(db *gorm.DB, id string, status string, reportID string) error {
+func (r *CrawledRepository) UpdateStatusAndReportID(db *gorm.DB, id string, status string, reportID string) error {
 	return db.Model(&entity.CrawledArticle{}).Where("id = ?", id).Updates(map[string]interface{}{
 		"status":    status,
 		"report_id": reportID,

@@ -26,14 +26,14 @@ func NewCrawlerWorker(
 	rss client.RssClient,
 	llm client.LlmClient,
 	nominatim client.NominatimClient,
-	uc *usecase.CrawlerUseCase,
+	usecase *usecase.CrawlerUseCase,
 ) *CrawlerWorker {
 	return &CrawlerWorker{
 		Log:             log,
 		RssClient:       rss,
 		LlmClient:       llm,
 		NominatimClient: nominatim,
-		CrawlerUseCase:  uc,
+		CrawlerUseCase:  usecase,
 		Cron:            cron.New(),
 	}
 }
@@ -54,7 +54,6 @@ func (w *CrawlerWorker) StartScheduler() {
 	w.Log.Info("AI News Crawler scheduler started")
 }
 
-// RunCrawler mengeksekusi logika penarikan dan pemrosesan berita
 func (w *CrawlerWorker) RunCrawler() {
 	ctx := context.Background()
 	keywords := []string{"jalan rusak", "jembatan rusak", "sampah menumpuk", "bangunan terbengkalai", "drainase tersumbat"}

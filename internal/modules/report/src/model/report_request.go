@@ -33,26 +33,3 @@ type CreateReportRequest struct {
 	PrimaryPhotoURL string  `json:"primary_photo_url" validate:"required,url,max=500"`
 	ReporterEmail   string  `json:"reporter_email" validate:"omitempty,email,max=150"`
 }
-
-type ProcessCrawledArticleRequest struct {
-	URL         string `json:"url" validate:"required,url,max=2048"`
-	Title       string `json:"title" validate:"required,max=200"`
-	Content     string `json:"content" validate:"required"`
-	PublishedAt string `json:"published_at" validate:"omitempty"` // ISO8601 string
-}
-
-// CrawlerExtractResult is the expected output from the LLM client
-type CrawlerExtractResult struct {
-	CategoryID string `json:"category_id"`
-	Location   string `json:"location"`
-	Severity   string `json:"severity"`
-	IsRelevant bool   `json:"is_relevant"` // If false, LLM decided it's not an infrastructure issue
-}
-
-// CrawlerGeocodeResult is the expected output from the Geocoding client
-type CrawlerGeocodeResult struct {
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
-	Address   string  `json:"address"`
-	VillageID string  `json:"village_id"`
-}
