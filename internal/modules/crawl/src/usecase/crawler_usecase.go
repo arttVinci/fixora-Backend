@@ -8,7 +8,7 @@ import (
 	crawl_repo "github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/repository"
 	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report/client"
 	report_entity "github.com/arttVinci/fixora-Backend/internal/modules/report/src/entity"
-	
+
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/sirupsen/logrus"
