@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/model"
-	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/usecase"
+	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/model"
+	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/usecase"
 	"github.com/arttVinci/fixora-Backend/internal/shared/client"
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
