@@ -31,7 +31,6 @@ type Report struct {
 	ReportConfirmations []ReportConfirmation `gorm:"foreignKey:ReportID;references:ID"`
 	MergeLogsAsChild    []MergeLog           `gorm:"foreignKey:ReportID;references:ID"`
 	MergeLogsAsParent   []MergeLog           `gorm:"foreignKey:DuplicateOfReportID;references:ID"`
-	CrawledArticles     []CrawledArticle     `gorm:"foreignKey:ReportID;references:ID"`
 }
 
 func (Report) TableName() string {
