@@ -1,4 +1,4 @@
-package client
+package report_client
 
 import (
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/entity"
