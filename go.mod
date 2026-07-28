@@ -5,6 +5,8 @@ go 1.25.3
 require (
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/gofiber/fiber/v2 v2.52.14
+	github.com/mmcdole/gofeed v1.4.0
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/google/generative-ai-go v0.20.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/viper v1.21.0
@@ -13,6 +15,8 @@ require (
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/gorm v1.30.0
 )
+
+require github.com/mmcdole/goxpp/v2 v2.0.0 // indirect
 
 require (
 	cloud.google.com/go v0.115.0 // indirect
