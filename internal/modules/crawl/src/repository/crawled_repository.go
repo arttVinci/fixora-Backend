@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/entity"
+	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/entity"
 	shared_repo "github.com/arttVinci/fixora-Backend/internal/shared/repository"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"

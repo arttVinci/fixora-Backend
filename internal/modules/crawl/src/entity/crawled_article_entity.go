@@ -20,9 +20,7 @@ type CrawledArticle struct {
 	CreatedAt           *time.Time `gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt           *time.Time `gorm:"column:updated_at;autoUpdateTime"`
 
-	// Relasi
-	ExtractedCategory *Category `gorm:"foreignKey:ExtractedCategoryID;references:ID"`
-	Report            *Report   `gorm:"foreignKey:ReportID;references:ID"`
+	// Relasi lintas modul dihapus sesuai aturan AGENTS.md
 }
 
 func (CrawledArticle) TableName() string {
