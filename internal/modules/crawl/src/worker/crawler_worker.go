@@ -5,8 +5,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/infra"
 	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/model"
 	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/usecase"
+	region_client "github.com/arttVinci/fixora-Backend/internal/modules/region-client"
+	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report-client"
 	"github.com/arttVinci/fixora-Backend/internal/shared/client"
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
@@ -14,38 +17,41 @@ import (
 
 type CrawlerWorker struct {
 	Log             *logrus.Logger
-	RssClient       client.RssClient
-	LlmClient       client.LlmClient
+	RssClient       infra.RssClient
+	LlmClient       infra.LlmClient
 	NominatimClient client.NominatimClient
 	CrawlerUseCase  *usecase.CrawlerUseCase
+	ReportClient    report_client.Client
+	RegionClient    region_client.Client
 	Cron            *cron.Cron
 }
 
 func NewCrawlerWorker(
 	log *logrus.Logger,
-	rss client.RssClient,
-	llm client.LlmClient,
+	rss infra.RssClient,
+	llm infra.LlmClient,
 	nominatim client.NominatimClient,
-	usecase *usecase.CrawlerUseCase,
+	crawlerUseCase *usecase.CrawlerUseCase,
+	reportClient report_client.Client,
+	regionClient region_client.Client,
 ) *CrawlerWorker {
 	return &CrawlerWorker{
 		Log:             log,
 		RssClient:       rss,
 		LlmClient:       llm,
 		NominatimClient: nominatim,
-		CrawlerUseCase:  usecase,
+		CrawlerUseCase:  crawlerUseCase,
+		ReportClient:    reportClient,
+		RegionClient:    regionClient,
 		Cron:            cron.New(),
 	}
 }
 
-// StartScheduler memulai cron job di background
 func (w *CrawlerWorker) StartScheduler() {
-	// Menjalankan crawler setiap 2 jam
 	_, err := w.Cron.AddFunc("0 */2 * * *", func() {
 		w.Log.Info("Starting scheduled AI News Crawler...")
 		w.RunCrawler()
 	})
-	
 	if err != nil {
 		w.Log.Fatalf("Failed to schedule crawler worker: %+v", err)
 	}
@@ -55,77 +61,121 @@ func (w *CrawlerWorker) StartScheduler() {
 }
 
 func (w *CrawlerWorker) RunCrawler() {
-	ctx := context.Background()
-	keywords := []string{"jalan rusak", "jembatan rusak", "sampah menumpuk", "bangunan terbengkalai", "drainase tersumbat"}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
 
-	for _, keyword := range keywords {
-		articles, err := w.RssClient.FetchArticles(ctx, keyword)
+	categories, err := w.ReportClient.GetAllCategories(w.CrawlerUseCase.DB.WithContext(ctx))
+	if err != nil {
+		w.Log.Warnf("Failed to fetch categories: %+v", err)
+		return
+	}
+
+	allArticles := make(map[string]infra.RSSArticle)
+	for _, category := range categories {
+		articles, err := w.RssClient.FetchArticles(ctx, category.Name)
 		if err != nil {
-			w.Log.Warnf("Crawler failed to fetch articles for keyword '%s': %+v", keyword, err)
+			w.Log.Warnf("Failed to fetch RSS for '%s': %+v", category.Name, err)
 			continue
 		}
 
-		w.processArticlesConcurrently(ctx, articles)
+		for _, article := range articles {
+			if _, exists := allArticles[article.URL]; !exists {
+				allArticles[article.URL] = article
+			}
+		}
 	}
+
+	w.processArticles(ctx, allArticles)
 }
 
-func (w *CrawlerWorker) processArticlesConcurrently(ctx context.Context, articles []client.RSSArticle) {
+func (w *CrawlerWorker) processArticles(ctx context.Context, articles map[string]infra.RSSArticle) {
 	var wg sync.WaitGroup
-	// Menggunakan channel sebagai semaphore untuk membatasi maksimal 5 goroutine berjalan bersamaan
-	// agar tidak terkena rate limit dari API LLM atau Nominatim
 	semaphore := make(chan struct{}, 5)
 
 	for _, article := range articles {
-		// 1. Cek duplikasi (Fase 2) - Eksekusi sinkron karena ini cuma 1 query DB cepat
 		if w.CrawlerUseCase.IsArticleProcessed(ctx, article.URL) {
 			continue
 		}
 
 		wg.Add(1)
-		semaphore <- struct{}{} // Acquire token
+		semaphore <- struct{}{}
 
-		go func(art client.RSSArticle) {
+		go func(art infra.RSSArticle) {
 			defer wg.Done()
-			defer func() { <-semaphore }() // Release token
+			defer func() { <-semaphore }()
 
-			// 2. Ekstraksi LLM (Fase 3)
-			extraction, err := w.LlmClient.ExtractNewsInfo(ctx, art.Title, art.Content)
+			artCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+			defer cancel()
+
+			crawledAt := time.Now()
+			publishedAt := parsePublishedAt(art.PublishedAt)
+
+			extraction, err := w.LlmClient.ExtractNewsInfo(artCtx, art.Title, art.Content)
 			if err != nil || extraction == nil {
-				w.Log.Warnf("Failed to extract info for article %s: %+v", art.URL, err)
+				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "llm_extraction_failed", publishedAt, crawledAt)
 				return
 			}
 
-			// Abaikan jika berita tidak relevan dengan infrastruktur
 			if !extraction.IsRelevant {
+				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "not_relevant", publishedAt, crawledAt)
 				return
 			}
 
-			// 3. Geocoding (Fase 4)
-			geocode, err := w.NominatimClient.Geocode(ctx, extraction.Location)
+			category, err := w.ReportClient.GetCategoryBySlug(w.CrawlerUseCase.DB.WithContext(artCtx), extraction.Category)
+			if err != nil || category == nil {
+				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "category_not_found", publishedAt, crawledAt)
+				return
+			}
+
+			geocode, err := w.NominatimClient.Geocode(artCtx, extraction.Location)
 			if err != nil || geocode == nil {
-				w.Log.Warnf("Failed to geocode location '%s': %+v", extraction.Location, err)
+				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "geocoding_failed", publishedAt, crawledAt)
 				return
 			}
 
-			// 4. Simpan ke database (Fase 5 & 6)
+			village, err := w.RegionClient.ResolveVillageByName(w.CrawlerUseCase.DB.WithContext(artCtx), geocode.Address)
+			if err != nil || village == nil {
+				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "village_not_resolved", publishedAt, crawledAt)
+				return
+			}
+
 			req := &model.ProcessCrawledArticleRequest{
-				URL:        art.URL,
-				Title:      art.Title,
-				Content:    art.Content,
-				SourceName: art.SourceName,
-				CrawledAt:  time.Now(),
-				Extraction: extraction,
-				Geocode:    geocode,
+				URL:          art.URL,
+				Title:        art.Title,
+				Content:      art.Content,
+				SourceName:   art.SourceName,
+				PublishedAt:  publishedAt,
+				CrawledAt:    crawledAt,
+				CategoryID:   category.ID,
+				CategorySlug: category.Slug,
+				VillageID:    village.ID,
+				Latitude:     geocode.Latitude,
+				Longitude:    geocode.Longitude,
+				Address:      geocode.Address,
+				Severity:     extraction.Severity,
 			}
 
-			if err := w.CrawlerUseCase.SaveCrawledReport(ctx, req); err != nil {
-				w.Log.Warnf("Failed to save crawled report for %s: %+v", art.URL, err)
-			} else {
-				w.Log.Infof("Successfully processed and saved crawled article: %s", art.Title)
+			if err := w.CrawlerUseCase.SaveCrawledReport(artCtx, req); err != nil {
+				w.Log.Warnf("Failed to save crawled report: %+v", err)
 			}
-
 		}(article)
 	}
 
-	wg.Wait() // Tunggu semua artikel di keyword ini selesai sebelum lanjut ke keyword berikutnya
+	wg.Wait()
+}
+
+func parsePublishedAt(value string) time.Time {
+	if value == "" {
+		return time.Now()
+	}
+
+	layouts := []string{time.RFC1123Z, time.RFC1123, time.RFC3339, "Mon, 02 Jan 2006 15:04:05 MST"}
+	for _, layout := range layouts {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			return parsed
+		}
+	}
+
+	return time.Now()
 }
