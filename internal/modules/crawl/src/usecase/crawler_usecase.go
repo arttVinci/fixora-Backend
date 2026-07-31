@@ -2,12 +2,14 @@ package usecase
 
 import (
 	"context"
+	"time"
 
 	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/entity"
+	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/infra"
 	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/model"
 	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/repository"
 	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report-client"
-
+	region_client "github.com/arttVinci/fixora-Backend/internal/modules/region-client"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/sirupsen/logrus"
@@ -20,6 +22,7 @@ type CrawlerUseCase struct {
 	Validate                 *validator.Validate
 	CrawledArticleRepository *repository.CrawledRepository
 	ReportClient             report_client.Client
+	RegionClient             region_client.Client
 }
 
 func NewCrawlerUseCase(
@@ -27,7 +30,8 @@ func NewCrawlerUseCase(
 	log *logrus.Logger,
 	validate *validator.Validate,
 	crawledRepo *repository.CrawledRepository,
-	reportClient  report_client.Client,
+	reportClient report_client.Client,
+	regionClient region_client.Client,
 ) *CrawlerUseCase {
 	return &CrawlerUseCase{
 		DB:                       db,
@@ -35,6 +39,7 @@ func NewCrawlerUseCase(
 		Validate:                 validate,
 		CrawledArticleRepository: crawledRepo,
 		ReportClient:             reportClient,
+		RegionClient:             regionClient,
 	}
 }
 
@@ -48,49 +53,48 @@ func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *model.Proce
 	tx := c.DB.WithContext(ctx).Begin()
 	defer tx.Rollback()
 
+	articleID := infra.GenerateArticleID(req.SourceName)
 	content := req.Content
 	crawled := &entity.CrawledArticle{
-		URL:                 req.URL,
-		Title:               req.Title,
-		Content:             &content,
-		SourceName:          req.SourceName,
-		CrawledAt:           &req.CrawledAt,
-		Status:              "processed",
-		ExtractedLocation:   &req.Extraction.Location,
-		ExtractedCategoryID: &req.Extraction.CategoryID,
-		ExtractedSeverity:   &req.Extraction.Severity,
-		ExtractedLatitude:   &req.Geocode.Latitude,
-		ExtractedLongitude:  &req.Geocode.Longitude,
+		ID:          articleID,
+		URL:         req.URL,
+		Title:       req.Title,
+		Content:     &content,
+		SourceName:  req.SourceName,
+		PublishedAt: &req.PublishedAt,
+		CrawledAt:   &req.CrawledAt,
+		Status:      "processed",
 	}
-	
+
 	if err := c.CrawledArticleRepository.Create(tx, crawled); err != nil {
 		c.Log.Warnf("Failed to create crawled article : %+v", err)
 		return fiber.NewError(fiber.StatusInternalServerError, "Gagal menyimpan artikel hasil crawl")
 	}
 
-	address := req.Geocode.Address
+	address := req.Address
+	description := req.Content
 	report := &report_client.ReportClientRequest{
-		CategoryID:      req.Extraction.CategoryID,
-		VillageID:       req.Geocode.VillageID,
+		ID:              infra.GenerateReportID(req.CategorySlug),
+		CategoryID:      req.CategoryID,
+		VillageID:       req.VillageID,
 		Title:           req.Title,
-		Description:     &content,
-		Latitude:        req.Geocode.Latitude,
-		Longitude:       req.Geocode.Longitude,
+		Description:     &description,
+		Latitude:        req.Latitude,
+		Longitude:       req.Longitude,
 		Address:         &address,
-		Severity:        req.Extraction.Severity,
+		Severity:        req.Severity,
 		Status:          "pending_verification",
 		SourceType:      "ai_news",
-		ConfidenceScore: 0.8, // Default score AI news
-		FirstReportedAt: &req.CrawledAt,
+		ConfidenceScore: 0.8,
+		FirstReportedAt: &req.PublishedAt,
 	}
-	
+
 	reportRes, err := c.ReportClient.CreateReport(tx, report)
 	if err != nil {
 		c.Log.Warnf("Failed to create auto-report via client : %+v", err)
 		return fiber.NewError(fiber.StatusInternalServerError, "Gagal membuat laporan otomatis")
 	}
 
-	crawled.ReportID = &reportRes.ID
 	if err := c.CrawledArticleRepository.UpdateStatusAndReportID(tx, crawled.ID, "processed", reportRes.ID); err != nil {
 		c.Log.Warnf("Failed to update crawled article relation : %+v", err)
 		return fiber.NewError(fiber.StatusInternalServerError, "Gagal mengaitkan artikel dengan laporan")
@@ -99,6 +103,34 @@ func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *model.Proce
 	if err := tx.Commit().Error; err != nil {
 		c.Log.Warnf("Failed commit transaction : %+v", err)
 		return fiber.NewError(fiber.StatusInternalServerError, "Gagal menyimpan data sistem crawler")
+	}
+
+	return nil
+}
+
+func (c *CrawlerUseCase) SaveRejectedArticle(ctx context.Context, url, title, content, sourceName, reason string, publishedAt, crawledAt time.Time) error {
+	tx := c.DB.WithContext(ctx).Begin()
+	defer tx.Rollback()
+
+	article := &entity.CrawledArticle{
+		ID:           infra.GenerateArticleID(sourceName),
+		URL:          url,
+		Title:        title,
+		Content:      &content,
+		SourceName:   sourceName,
+		RejectReason: &reason,
+		PublishedAt:  &publishedAt,
+		CrawledAt:    &crawledAt,
+	}
+
+	if err := c.CrawledArticleRepository.SaveRejected(tx, article); err != nil {
+		c.Log.Warnf("Failed to save rejected crawled article : %+v", err)
+		return fiber.NewError(fiber.StatusInternalServerError, "Gagal menyimpan artikel yang ditolak")
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		c.Log.Warnf("Failed commit transaction : %+v", err)
+		return fiber.NewError(fiber.StatusInternalServerError, "Gagal menyimpan artikel yang ditolak")
 	}
 
 	return nil
