@@ -1,4 +1,4 @@
-package client
+package infra
 
 import (
 	"context"
@@ -30,31 +30,27 @@ func NewRssClient(log *logrus.Logger) RssClient {
 
 func (c *rssClientImpl) FetchArticles(ctx context.Context, keyword string) ([]RSSArticle, error) {
 	fp := gofeed.NewParser()
-	
-	// Format untuk Google News RSS bahasa Indonesia
 	searchURL := "https://news.google.com/rss/search?q=" + url.QueryEscape(keyword) + "&hl=id&gl=ID&ceid=ID:id"
-	
+
 	feed, err := fp.ParseURLWithContext(searchURL, ctx)
 	if err != nil {
 		c.Log.Warnf("Failed to fetch RSS for %s : %+v", keyword, err)
 		return nil, err
 	}
 
-	var articles []RSSArticle
+	articles := make([]RSSArticle, 0, len(feed.Items))
 	for _, item := range feed.Items {
 		content := item.Description
 		if content == "" {
 			content = item.Title
 		}
-		
-		source := "Google News RSS"
-		
+
 		articles = append(articles, RSSArticle{
 			Title:       item.Title,
 			URL:         item.Link,
 			Content:     content,
 			PublishedAt: item.Published,
-			SourceName:  source,
+			SourceName:  "Google News RSS",
 		})
 	}
 
