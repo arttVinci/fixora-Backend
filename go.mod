@@ -8,7 +8,6 @@ require (
 	github.com/google/generative-ai-go v0.20.1
 	github.com/mmcdole/gofeed v1.4.0
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/google/generative-ai-go v0.20.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/viper v1.21.0
 	github.com/swaggo/fiber-swagger v1.3.0
