@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -15,7 +16,6 @@ type GeocodeResult struct {
 	Latitude  float64
 	Longitude float64
 	Address   string
-	VillageID string
 }
 
 type NominatimClient interface {
@@ -48,14 +48,13 @@ func (c *nominatimClientImpl) Geocode(ctx context.Context, locationText string) 
 	}
 
 	searchURL := fmt.Sprintf("https://nominatim.openstreetmap.org/search?q=%s&format=json&limit=1", url.QueryEscape(locationText))
-	
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
 	if err != nil {
 		c.Log.Warnf("Failed to create Nominatim request: %+v", err)
 		return nil, err
 	}
-	
-	// Nominatim policy requires a valid User-Agent
+
 	req.Header.Set("User-Agent", "Fixora-Backend/1.0 (Crawler)")
 
 	resp, err := c.HttpClient.Do(req)
@@ -81,16 +80,21 @@ func (c *nominatimClientImpl) Geocode(ctx context.Context, locationText string) 
 	}
 
 	first := results[0]
-	var lat, lon float64
-	fmt.Sscanf(first.Lat, "%f", &lat)
-	fmt.Sscanf(first.Lon, "%f", &lon)
+	lat, err := strconv.ParseFloat(first.Lat, 64)
+	if err != nil {
+		c.Log.Warnf("Failed to parse latitude '%s': %+v", first.Lat, err)
+		return nil, fmt.Errorf("invalid latitude from Nominatim: %s", first.Lat)
+	}
 
-	// Note: We use a dummy VillageID for now since reversing to village_id is a separate process/domain logic
-	// that requires database cross-reference with regions.
+	lon, err := strconv.ParseFloat(first.Lon, 64)
+	if err != nil {
+		c.Log.Warnf("Failed to parse longitude '%s': %+v", first.Lon, err)
+		return nil, fmt.Errorf("invalid longitude from Nominatim: %s", first.Lon)
+	}
+
 	return &GeocodeResult{
 		Latitude:  lat,
 		Longitude: lon,
 		Address:   first.DisplayName,
-		VillageID: "00000000-0000-0000-0000-000000000000",
 	}, nil
 }

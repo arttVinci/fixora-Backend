@@ -175,23 +175,20 @@ Mencatat alasan & skor kemiripan saat dua laporan digabungkan (US-07), agar kepu
 
 Artikel berita yang ditarik AI news crawler, melewati proses: crawl → LLM extraction → validasi → (opsional) jadi report.
 
-| Field                       | Type            | Constraint                     | Penjelasan                                           |
-| --------------------------- | --------------- | ------------------------------ | ---------------------------------------------------- |
-| `id`                        | `UUID`          | PK                             |                                                      |
-| `url`                       | `VARCHAR(1000)` | NOT NULL, UNIQUE               | Kunci dedup — mencegah crawl ulang artikel yang sama |
-| `title`                     | `VARCHAR(500)`  | NOT NULL                       |                                                      |
-| `content`                   | `TEXT`          | NULLABLE                       | Untuk audit trail & re-processing                    |
-| `source_name`               | `VARCHAR(100)`  | NOT NULL                       | Contoh: `"Detik.com"`                                |
-| `extracted_location`        | `TEXT`          | NULLABLE                       | Lokasi mentah hasil ekstraksi LLM, sebelum geocoding |
-| `extracted_category_id`     | `UUID`          | FK → `categories.id`, NULLABLE |                                                      |
-| `extracted_severity`        | `VARCHAR(10)`   | NULLABLE                       | Diselaraskan ke `ringan`/`sedang`/`parah`            |
-| `extracted_latitude`        | `DECIMAL(10,8)` | NULLABLE                       |                                                      |
-| `extracted_longitude`       | `DECIMAL(11,8)` | NULLABLE                       |                                                      |
-| `status`                    | `VARCHAR(15)`   | NOT NULL, default `'pending'`  | `pending`, `processed`, `rejected`                   |
-| `report_id`                 | `UUID`          | FK → `reports.id`, NULLABLE    | Traceability ke report hasil ekstraksi               |
-| `crawled_at`                | `TIMESTAMPTZ`   | NOT NULL                       |                                                      |
-| `processed_at`              | `TIMESTAMPTZ`   | NULLABLE                       |                                                      |
-| `created_at` / `updated_at` | `TIMESTAMPTZ`   | NOT NULL, default `NOW()`      |                                                      |
+| Field                       | Type            | Constraint                    | Penjelasan                                           |
+| --------------------------- | --------------- | ----------------------------- | ---------------------------------------------------- |
+| `id`                        | `VARCHAR(100)`  | PK                            | Special ID, contoh `ART-google-news-rss-20260731-a1b2` |
+| `url`                       | `VARCHAR(1000)` | NOT NULL, UNIQUE              | Kunci dedup — mencegah crawl ulang artikel yang sama |
+| `title`                     | `VARCHAR(500)`  | NOT NULL                      |                                                      |
+| `content`                   | `TEXT`          | NULLABLE                      | Untuk audit trail & re-processing                    |
+| `source_name`               | `VARCHAR(100)`  | NOT NULL                      | Contoh: `"Google News RSS"`                         |
+| `status`                    | `VARCHAR(15)`   | NOT NULL, default `'pending'` | `pending`, `processed`, `rejected`                   |
+| `reject_reason`             | `VARCHAR(100)`  | NULLABLE                      | Alasan artikel ditolak oleh pipeline crawler         |
+| `report_id`                 | `VARCHAR(100)`  | NULLABLE                      | Traceability ke report hasil ekstraksi               |
+| `published_at`              | `DATETIME`      | NULLABLE                      | Waktu publikasi dari RSS                             |
+| `crawled_at`                | `DATETIME`      | NOT NULL                      |                                                      |
+| `processed_at`              | `DATETIME`      | NULLABLE                      |                                                      |
+| `created_at` / `updated_at` | `DATETIME`      | NOT NULL, default current time |                                                     |
 
 ---
 
