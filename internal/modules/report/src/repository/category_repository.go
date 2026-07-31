@@ -24,3 +24,7 @@ func (r *CategoryRepository) FindAll(db *gorm.DB) ([]entity.Category, error) {
 	}
 	return items, nil
 }
+
+func (r *CategoryRepository) FindBySlug(db *gorm.DB, item *entity.Category, slug string) error {
+	return db.Where("slug = ?", slug).Take(item).Error
+}
