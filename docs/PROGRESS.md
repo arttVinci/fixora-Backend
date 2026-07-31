@@ -14,14 +14,14 @@
 
 - [ ] Buat GORM model: `Province`, `City`, `District`, `Village`
 - [ ] Buat GORM model: `Category`
-- [ ] Buat GORM model: `Report` (village_id NULLABLE)
+- [ ] Buat GORM model: `Report` (village_id NOT NULL)
 - [ ] Buat GORM model: `ReportPhoto`
 - [ ] Buat GORM model: `CrawledArticle`
 - [ ] Pastikan semua relasi (FK, ON DELETE CASCADE) terdefinisi dengan benar
 - [ ] Auto-migrate semua model saat aplikasi start
-- [ ] Test: jalankan aplikasi, pastikan 8 tabel terbuat di PostgreSQL
+- [ ] Test: jalankan aplikasi, pastikan tabel terbuat di MySQL
 
-**Catatan:** `village_id` di `reports` harus nullable — kalau reverse geocoding gagal matching, report tetap bisa tersimpan.
+**Catatan:** `village_id` di `reports` wajib NOT NULL — report tanpa village_id yang valid harus ditolak (rejected).
 
 ---
 
