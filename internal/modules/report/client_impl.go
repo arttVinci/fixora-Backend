@@ -8,12 +8,22 @@ import (
 )
 
 type clientImpl struct {
-	db               *gorm.DB
-	reportRepository *repository.ReportRepository
+	db                 *gorm.DB
+	reportRepository   *repository.ReportRepository
+	categoryRepository *repository.CategoryRepository
+}
+
+func NewClient(db *gorm.DB, reportRepository *repository.ReportRepository, categoryRepository *repository.CategoryRepository) report_client.Client {
+	return &clientImpl{
+		db:                 db,
+		reportRepository:   reportRepository,
+		categoryRepository: categoryRepository,
+	}
 }
 
 func (c *clientImpl) CreateReport(tx *gorm.DB, req *report_client.ReportClientRequest) (*report_client.ReportClientResponse, error) {
 	report := &entity.Report{
+		ID:              req.ID,
 		CategoryID:      req.CategoryID,
 		VillageID:       req.VillageID,
 		Title:           req.Title,
@@ -34,5 +44,39 @@ func (c *clientImpl) CreateReport(tx *gorm.DB, req *report_client.ReportClientRe
 
 	return &report_client.ReportClientResponse{
 		ID: report.ID,
+	}, nil
+}
+
+func (c *clientImpl) GetAllCategories(tx *gorm.DB) ([]report_client.CategoryClientResponse, error) {
+	categories, err := c.categoryRepository.FindAll(tx)
+	if err != nil {
+		return nil, err
+	}
+
+	responses := make([]report_client.CategoryClientResponse, len(categories))
+	for i, category := range categories {
+		responses[i] = report_client.CategoryClientResponse{
+			ID:   category.ID,
+			Name: category.Name,
+			Slug: category.Slug,
+		}
+	}
+
+	return responses, nil
+}
+
+func (c *clientImpl) GetCategoryBySlug(tx *gorm.DB, slug string) (*report_client.CategoryClientResponse, error) {
+	category := new(entity.Category)
+	if err := c.categoryRepository.FindBySlug(tx, category, slug); err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &report_client.CategoryClientResponse{
+		ID:   category.ID,
+		Name: category.Name,
+		Slug: category.Slug,
 	}, nil
 }

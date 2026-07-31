@@ -3,11 +3,10 @@ package usecase
 import (
 	"context"
 
-	crawl_entity "github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/entity"
-	crawl_model "github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/model"
-	crawl_repo "github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/repository"
-	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report/client"
-	report_entity "github.com/arttVinci/fixora-Backend/internal/modules/report/src/entity"
+	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/entity"
+	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/model"
+	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/repository"
+	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report-client"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
@@ -19,16 +18,16 @@ type CrawlerUseCase struct {
 	DB                       *gorm.DB
 	Log                      *logrus.Logger
 	Validate                 *validator.Validate
-	CrawledArticleRepository *crawl_repo.CrawledRepository
-	ReportClient             report_client.ReportClient
+	CrawledArticleRepository *repository.CrawledRepository
+	ReportClient             report_client.Client
 }
 
 func NewCrawlerUseCase(
 	db *gorm.DB,
 	log *logrus.Logger,
 	validate *validator.Validate,
-	crawledRepo *crawl_repo.CrawledRepository,
-	reportClient report_client.ReportClient,
+	crawledRepo *repository.CrawledRepository,
+	reportClient  report_client.Client,
 ) *CrawlerUseCase {
 	return &CrawlerUseCase{
 		DB:                       db,
@@ -40,17 +39,17 @@ func NewCrawlerUseCase(
 }
 
 func (c *CrawlerUseCase) IsArticleProcessed(ctx context.Context, url string) bool {
-	article := new(crawl_entity.CrawledArticle)
+	article := new(entity.CrawledArticle)
 	err := c.CrawledArticleRepository.FindByURL(c.DB.WithContext(ctx), article, url)
 	return err == nil && article.ID != ""
 }
 
-func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *crawl_model.ProcessCrawledArticleRequest) error {
+func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *model.ProcessCrawledArticleRequest) error {
 	tx := c.DB.WithContext(ctx).Begin()
 	defer tx.Rollback()
 
 	content := req.Content
-	crawled := &crawl_entity.CrawledArticle{
+	crawled := &entity.CrawledArticle{
 		URL:                 req.URL,
 		Title:               req.Title,
 		Content:             &content,
@@ -70,7 +69,7 @@ func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *crawl_model
 	}
 
 	address := req.Geocode.Address
-	report := &report_entity.Report{
+	report := &report_client.ReportClientRequest{
 		CategoryID:      req.Extraction.CategoryID,
 		VillageID:       req.Geocode.VillageID,
 		Title:           req.Title,
@@ -85,13 +84,14 @@ func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *crawl_model
 		FirstReportedAt: &req.CrawledAt,
 	}
 	
-	if err := c.ReportClient.CreateReport(tx, report); err != nil {
+	reportRes, err := c.ReportClient.CreateReport(tx, report)
+	if err != nil {
 		c.Log.Warnf("Failed to create auto-report via client : %+v", err)
 		return fiber.NewError(fiber.StatusInternalServerError, "Gagal membuat laporan otomatis")
 	}
 
-	crawled.ReportID = &report.ID
-	if err := c.CrawledArticleRepository.UpdateStatusAndReportID(tx, crawled.ID, "processed", report.ID); err != nil {
+	crawled.ReportID = &reportRes.ID
+	if err := c.CrawledArticleRepository.UpdateStatusAndReportID(tx, crawled.ID, "processed", reportRes.ID); err != nil {
 		c.Log.Warnf("Failed to update crawled article relation : %+v", err)
 		return fiber.NewError(fiber.StatusInternalServerError, "Gagal mengaitkan artikel dengan laporan")
 	}
