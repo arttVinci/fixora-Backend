@@ -3,6 +3,7 @@ package report_client
 import "time"
 
 type ReportClientRequest struct {
+	ID              string
 	CategoryID      string
 	VillageID       string
 	Title           string
