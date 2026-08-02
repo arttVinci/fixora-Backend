@@ -44,7 +44,6 @@ func (c *llmClientImpl) ExtractNewsInfo(ctx context.Context, title, content stri
 			},
 			"category": {
 				Type:        genai.TypeString,
-				// ini biar best practice kita suruh llm ikuti apa yang ada di database, apakah ada salah satunya. Jika termasuk maka itu category nya.
 				Description: "Slug kategori masalah: jalan-rusak, jembatan-rusak, sampah-menumpuk, bangunan-terbengkalai, drainase-tersumbat.",
 			},
 			"severity": {
