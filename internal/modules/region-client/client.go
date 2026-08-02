@@ -3,5 +3,5 @@ package region_client
 import "gorm.io/gorm"
 
 type Client interface {
-	ResolveVillageByName(tx *gorm.DB, addressText string) (*VillageClientResponse, error)
+	ResolveVillageByAddress(tx *gorm.DB, villageName, districtName, cityName, provinceName string) (*VillageClientResponse, error)
 }
