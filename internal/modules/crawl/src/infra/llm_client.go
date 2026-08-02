@@ -34,7 +34,7 @@ func NewLlmClient(log *logrus.Logger, genaiClient *genai.Client) LlmClient {
 }
 
 func (c *llmClientImpl) ExtractNewsInfo(ctx context.Context, title, content string) (*ExtractionResult, error) {
-	model := c.Genai.GenerativeModel("gemini-1.5-pro")
+	model := c.Genai.GenerativeModel("gemini-3.6-flash")
 	model.ResponseSchema = &genai.Schema{
 		Type: genai.TypeObject,
 		Properties: map[string]*genai.Schema{
@@ -44,6 +44,7 @@ func (c *llmClientImpl) ExtractNewsInfo(ctx context.Context, title, content stri
 			},
 			"category": {
 				Type:        genai.TypeString,
+				// ini biar best practice kita suruh llm ikuti apa yang ada di database, apakah ada salah satunya. Jika termasuk maka itu category nya.
 				Description: "Slug kategori masalah: jalan-rusak, jembatan-rusak, sampah-menumpuk, bangunan-terbengkalai, drainase-tersumbat.",
 			},
 			"severity": {
