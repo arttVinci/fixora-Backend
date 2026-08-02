@@ -5,17 +5,22 @@ import (
 
 	region_client "github.com/arttVinci/fixora-Backend/internal/modules/region-client"
 	"github.com/arttVinci/fixora-Backend/internal/modules/region/src/entity"
+	"github.com/arttVinci/fixora-Backend/internal/modules/region/src/repository"
 	"gorm.io/gorm"
 )
 
-func (m *Module) ResolveVillageByAddress(tx *gorm.DB, villageName, districtName, cityName, provinceName string) (*region_client.VillageClientResponse, error) {
+type clientImpl struct {
+	VillageRepository *repository.VillageRepository
+}
+
+func (c *clientImpl) ResolveVillageByAddress(tx *gorm.DB, villageName, districtName, cityName, provinceName string) (*region_client.VillageClientResponse, error) {
 	villageName = normalizeRegionName(villageName)
 	districtName = normalizeRegionName(districtName)
 	cityName = normalizeRegionName(cityName)
 	provinceName = normalizeRegionName(provinceName)
 
 	village := new(entity.Village)
-	if err := m.VillageRepository.FindByHierarchy(tx, village, villageName, districtName, cityName, provinceName); err != nil {
+	if err := c.VillageRepository.FindByHierarchy(tx, village, villageName, districtName, cityName, provinceName); err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil
 		}
