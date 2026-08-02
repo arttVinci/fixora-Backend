@@ -39,17 +39,10 @@ func (c *ReportUseCase) SearchMap(ctx context.Context, request *model.SearchRepo
 		return nil, fiber.NewError(fiber.StatusBadRequest, "Format data request tidak valid")
 	}
 
-	tx := c.DB.WithContext(ctx).Begin()
-	defer tx.Rollback()
-
+	tx := c.DB.WithContext(ctx)
 	items, err := c.ReportRepository.SearchMap(tx, request)
 	if err != nil {
 		c.Log.Warnf("Failed to search map reports : %+v", err)
-		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal mencari data laporan")
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		c.Log.Warnf("Failed commit transaction : %+v", err)
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal mencari data laporan")
 	}
 

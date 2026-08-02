@@ -4,12 +4,8 @@ import (
 	"fmt"
 
 	"github.com/arttVinci/fixora-Backend/internal/modules/report"
-	report_controller "github.com/arttVinci/fixora-Backend/internal/modules/report/src/controller"
-	report_repository "github.com/arttVinci/fixora-Backend/internal/modules/report/src/repository"
-	report_usecase "github.com/arttVinci/fixora-Backend/internal/modules/report/src/usecase"
 	"github.com/arttVinci/fixora-Backend/internal/shared/config"
 	module "github.com/arttVinci/fixora-Backend/internal/shared/modules"
-	"github.com/gofiber/fiber/v2"
 )
 
 // @title           AIC Backend API
@@ -35,15 +31,11 @@ func main() {
 	app := config.NewFiber(viperConfig)
 
 	// Module initialization (ordered by dependency)
-	// --- Report Module ---
-	reportRepo := report_repository.NewReportRepository(log)
-	reportUsecase := report_usecase.NewReportUseCase(db, log, validate, reportRepo)
-	reportController := report_controller.NewReportController(reportUsecase, log)
-	reportMod := report.NewReportModule(db, log, reportController)
+	reportModule := report.New(db, log, validate, viperConfig)
 
 	// Register all modules
 	modules := []module.Module{
-		reportMod,
+		reportModule,
 	}
 
 	// Auto-migration (each module migrates its own tables)
@@ -54,10 +46,9 @@ func main() {
 	}
 
 	// Route registration
-	var authMiddleware fiber.Handler = func(c *fiber.Ctx) error { return c.Next() } // dummy auth
-	
+	api := app.Group("/api")
 	for _, m := range modules {
-		m.RegisterRoutes(app, authMiddleware)
+		m.RegisterRoutes(api)
 	}
 
 	// Start server
@@ -72,4 +63,4 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
-}
+}

@@ -13,14 +13,6 @@ type clientImpl struct {
 	categoryRepository *repository.CategoryRepository
 }
 
-func NewClient(db *gorm.DB, reportRepository *repository.ReportRepository, categoryRepository *repository.CategoryRepository) report_client.Client {
-	return &clientImpl{
-		db:                 db,
-		reportRepository:   reportRepository,
-		categoryRepository: categoryRepository,
-	}
-}
-
 func (c *clientImpl) CreateReport(tx *gorm.DB, req *report_client.ReportClientRequest) (*report_client.ReportClientResponse, error) {
 	report := &entity.Report{
 		ID:              req.ID,

@@ -1,33 +1,38 @@
 package report
 
 import (
+	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report-client"
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/controller"
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/entity"
-	"github.com/gofiber/fiber/v2"
+	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/repository"
+	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/usecase"
+	"github.com/go-playground/validator/v10"
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 	"gorm.io/gorm"
 )
 
-type reportModule struct {
-	DB               *gorm.DB
-	Log              *logrus.Logger
-	ReportController *controller.ReportController
+type Module struct {
+	Controller *controller.ReportController
+	client     *clientImpl
+	db         *gorm.DB
 }
 
-func NewReportModule(
-	db *gorm.DB,
-	log *logrus.Logger,
-	reportController *controller.ReportController,
-) *reportModule {
-	return &reportModule{
-		DB:               db,
-		Log:              log,
-		ReportController: reportController,
+func New(db *gorm.DB, log *logrus.Logger, validate *validator.Validate, config *viper.Viper) *Module {
+	reportRepo := repository.NewReportRepository(log)
+	categoryRepo := repository.NewCategoryRepository(log)
+	reportUseCase := usecase.NewReportUseCase(db, log, validate, reportRepo)
+	reportController := controller.NewReportController(reportUseCase, log)
+
+	return &Module{
+		Controller: reportController,
+		client:     &clientImpl{db: db, reportRepository: reportRepo, categoryRepository: categoryRepo},
+		db:         db,
 	}
 }
 
-func (m *reportModule) Migrate() error {
-	return m.DB.AutoMigrate(
+func (m *Module) Migrate() error {
+	return m.db.AutoMigrate(
 		&entity.Category{},
 		&entity.Reporter{},
 		&entity.Report{},
@@ -37,6 +42,6 @@ func (m *reportModule) Migrate() error {
 	)
 }
 
-func (m *reportModule) RegisterRoutes(router fiber.Router, authMiddleware fiber.Handler) {
-	RegisterRoutes(router, authMiddleware, m.ReportController)
+func (m *Module) Client() report_client.Client {
+	return m.client
 }
