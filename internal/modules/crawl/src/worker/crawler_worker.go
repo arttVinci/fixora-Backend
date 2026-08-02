@@ -133,7 +133,19 @@ func (w *CrawlerWorker) processArticles(ctx context.Context, articles map[string
 				return
 			}
 
-			village, err := w.RegionClient.ResolveVillageByName(w.CrawlerUseCase.DB.WithContext(artCtx), geocode.Address)
+			reverseGeocode, err := w.NominatimClient.ReverseGeocode(artCtx, geocode.Latitude, geocode.Longitude)
+			if err != nil || reverseGeocode == nil {
+				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "reverse_geocoding_failed", publishedAt, crawledAt)
+				return
+			}
+
+			village, err := w.RegionClient.ResolveVillageByAddress(
+				w.CrawlerUseCase.DB.WithContext(artCtx),
+				reverseGeocode.Village,
+				reverseGeocode.District,
+				reverseGeocode.City,
+				reverseGeocode.Province,
+			)
 			if err != nil || village == nil {
 				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "village_not_resolved", publishedAt, crawledAt)
 				return
@@ -151,7 +163,7 @@ func (w *CrawlerWorker) processArticles(ctx context.Context, articles map[string
 				VillageID:    village.ID,
 				Latitude:     geocode.Latitude,
 				Longitude:    geocode.Longitude,
-				Address:      geocode.Address,
+				Address:      reverseGeocode.FullAddress,
 				Severity:     extraction.Severity,
 			}
 
