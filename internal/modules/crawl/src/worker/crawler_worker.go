@@ -48,6 +48,12 @@ func NewCrawlerWorker(
 }
 
 func (w *CrawlerWorker) StartScheduler() {
+	// Run immediately on startup so we don't wait for the first cron tick
+	go func() {
+		w.Log.Info("Starting initial AI News Crawler run on startup...")
+		w.RunCrawler()
+	}()
+
 	_, err := w.Cron.AddFunc("0 */2 * * *", func() {
 		w.Log.Info("Starting scheduled AI News Crawler...")
 		w.RunCrawler()
