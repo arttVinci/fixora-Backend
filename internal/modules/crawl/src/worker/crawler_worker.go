@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
 
@@ -77,22 +78,29 @@ func (w *CrawlerWorker) RunCrawler() {
 		return
 	}
 
+	const activeRegion = "Jakarta" 
+	
 	allArticles := make(map[string]infra.RSSArticle)
 	for _, category := range categories {
-		articles, err := w.RssClient.FetchArticles(ctx, category.Name)
-		if err != nil {
-			w.Log.Warnf("Failed to fetch RSS for '%s': %+v", category.Name, err)
-			continue
-		}
+		var keywords []string
+		json.Unmarshal(category.SearchKeywords, &keywords)
 
-		for _, article := range articles {
-			if utils.ArticleRssFilter(article) {
+		for _, keyword := range keywords { 
+			articles, err := w.RssClient.FetchArticles(ctx, keyword+" "+activeRegion)
+			if err != nil {
+				w.Log.Warnf("Failed to fetch RSS for '%s': %+v", keyword+" "+activeRegion, err)
 				continue
 			}
-			if _, exists := allArticles[article.URL]; !exists {
-				allArticles[article.URL] = article
+
+			for _, article := range articles {
+				if utils.ArticleRssFilter(article) {
+					continue
+				}
+				if _, exists := allArticles[article.URL]; !exists {
+					allArticles[article.URL] = article
+				}
 			}
-		}
+		 }
 	}
 
 	w.processArticles(ctx, allArticles)

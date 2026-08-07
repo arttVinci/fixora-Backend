@@ -48,9 +48,10 @@ func (c *clientImpl) GetAllCategories(tx *gorm.DB) ([]report_client.CategoryClie
 	responses := make([]report_client.CategoryClientResponse, len(categories))
 	for i, category := range categories {
 		responses[i] = report_client.CategoryClientResponse{
-			ID:   category.ID,
-			Name: category.Name,
-			Slug: category.Slug,
+			ID:             category.ID,
+			Name:           category.Name,
+			Slug:           category.Slug,
+			SearchKeywords: category.SearchKeywords,
 		}
 	}
 
