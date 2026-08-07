@@ -41,7 +41,7 @@ func (s *RegionSeeder) SeedIfEmpty() error {
 	// Regex to match the values inside the INSERT statement.
 	// Pattern: (id, 'code', 'name', 'type', 'postal_code'|NULL, 'parent_code'|NULL)
 	// Example: (1, '11', 'Aceh', 'province', NULL, NULL)
-	re := regexp.MustCompile(`\((\d+),\s*'([^']+)',\s*'([^']+)',\s*'([^']+)',\s*([^,]+),\s*([^)]+)\)`)
+	re := regexp.MustCompile(`\((\d+),\s*'([^']+)',\s*'(.*?)',\s*'([^']+)',\s*([^,]+),\s*([^)]+)\)`)
 	matches := re.FindAllStringSubmatch(content, -1)
 
 	var provinces []entity.Province
@@ -55,7 +55,7 @@ func (s *RegionSeeder) SeedIfEmpty() error {
 		}
 
 		code := match[2]
-		name := match[3]
+		name := strings.ReplaceAll(match[3], `\'`, `'`)
 		regionType := match[4]
 		parentCode := strings.Trim(strings.TrimSpace(match[6]), "'")
 
