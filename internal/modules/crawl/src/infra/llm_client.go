@@ -36,13 +36,17 @@ func NewLlmClient(log *logrus.Logger, genaiClient *genai.Client) LlmClient {
 }
 
 const maxRetries = 3
-var llmLimiter = rate.NewLimiter(rate.Every(12*time.Second), 1)
+
+var llmLimiter = rate.NewLimiter(rate.Every(5*time.Second), 1)
 
 func Limitter(ctx context.Context) error {
-    return llmLimiter.Wait(ctx)
+	return llmLimiter.Wait(ctx)
 }
 
 func isRateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
     return strings.Contains(err.Error(), "429") || 
            strings.Contains(err.Error(), "QuotaFailure")
 }
@@ -95,17 +99,27 @@ Balas JSON sesuai schema.`, title, content)
 
 		resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 		if err != nil {
+			lastErr = err
+
+			// Cek apakah errornya karena Rate Limit (429)
+			if isRateLimitError(err) {
+				backoff := time.Duration(15*(attempt+1)) * time.Second
+				c.Log.Warnf("LLM Rate limit hit (429). Retrying attempt %d/%d after %v...", attempt+1, maxRetries, backoff)
+
+				// Context-aware sleep — don't hang if context is already cancelled
+				select {
+				case <-ctx.Done():
+					c.Log.Warnf("Context cancelled during rate limit backoff: %+v", ctx.Err())
+					return nil, ctx.Err()
+				case <-time.After(backoff):
+				}
+				continue
+			}
+
+			// Kalau error lain (bukan 429), langsung return
 			c.Log.Warnf("Failed to generate content from LLM: %+v", err)
 			return nil, err
 		}
-
-		lastErr = err
-
-		if isRateLimitError(err) {
-            backoff := time.Duration(3+attempt*3) * time.Second
-            time.Sleep(backoff)
-            continue
-        }
 
 		if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
 			return nil, fmt.Errorf("no content returned from LLM")

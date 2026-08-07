@@ -49,7 +49,7 @@ func NewCrawlerWorker(
 	}
 }
 
-func (w *CrawlerWorker) StartScheduler() {
+func (w *CrawlerWorker) StartScheduler() error {
 	// Run immediately on startup so we don't wait for the first cron tick
 	go func() {
 		w.Log.Info("Starting initial AI News Crawler run on startup...")
@@ -62,20 +62,23 @@ func (w *CrawlerWorker) StartScheduler() {
 	})
 	if err != nil {
 		w.Log.Fatalf("Failed to schedule crawler worker: %+v", err)
+		return err
 	}
 
 	w.Cron.Start()
 	w.Log.Info("AI News Crawler scheduler started")
+
+	return nil
 }
 
-func (w *CrawlerWorker) RunCrawler() {
+func (w *CrawlerWorker) RunCrawler() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
 	categories, err := w.ReportClient.GetAllCategories(w.CrawlerUseCase.DB.WithContext(ctx))
 	if err != nil {
 		w.Log.Warnf("Failed to fetch categories: %+v", err)
-		return
+		return err
 	}
 
 	const activeRegion = "Jakarta" 
@@ -104,11 +107,13 @@ func (w *CrawlerWorker) RunCrawler() {
 	}
 
 	w.processArticles(ctx, allArticles)
+
+	return nil
 }
 
 func (w *CrawlerWorker) processArticles(ctx context.Context, articles map[string]infra.RSSArticle) {
 	var wg sync.WaitGroup
-	semaphore := make(chan struct{}, 5)
+	semaphore := make(chan struct{}, 2) // Keep low to avoid thundering herd on LLM API rate limits
 
 	for _, article := range articles {
 		if w.CrawlerUseCase.IsArticleProcessed(ctx, article.URL) {
