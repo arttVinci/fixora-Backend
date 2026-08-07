@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/generative-ai-go/genai"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/time/rate"
 )
 
 type ExtractionResult struct {
@@ -31,6 +33,18 @@ func NewLlmClient(log *logrus.Logger, genaiClient *genai.Client) LlmClient {
 		Log:   log,
 		Genai: genaiClient,
 	}
+}
+
+const maxRetries = 3
+var llmLimiter = rate.NewLimiter(rate.Every(12*time.Second), 1)
+
+func Limitter(ctx context.Context) error {
+    return llmLimiter.Wait(ctx)
+}
+
+func isRateLimitError(err error) bool {
+    return strings.Contains(err.Error(), "429") || 
+           strings.Contains(err.Error(), "QuotaFailure")
 }
 
 func (c *llmClientImpl) ExtractNewsInfo(ctx context.Context, title, content string) (*ExtractionResult, error) {
@@ -71,33 +85,50 @@ Panduan:
 4. severity wajib salah satu: ringan, sedang, parah.
 
 Balas JSON sesuai schema.`, title, content)
+    var lastErr error
 
-	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
-	if err != nil {
-		c.Log.Warnf("Failed to generate content from LLM: %+v", err)
-		return nil, err
+	for attempt := 0; attempt < maxRetries; attempt++ {
+
+		if err := Limitter(ctx); err != nil {
+            return nil, fmt.Errorf("rate limiter error: %w", err)
+        }
+
+		resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+		if err != nil {
+			c.Log.Warnf("Failed to generate content from LLM: %+v", err)
+			return nil, err
+		}
+
+		lastErr = err
+
+		if isRateLimitError(err) {
+            backoff := time.Duration(3+attempt*3) * time.Second
+            time.Sleep(backoff)
+            continue
+        }
+
+		if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+			return nil, fmt.Errorf("no content returned from LLM")
+		}
+
+		part := resp.Candidates[0].Content.Parts[0]
+		text, ok := part.(genai.Text)
+		if !ok {
+			return nil, fmt.Errorf("unexpected LLM response format")
+		}
+
+		jsonStr := strings.TrimPrefix(string(text), "```json\n")
+		jsonStr = strings.TrimSuffix(jsonStr, "\n```")
+		jsonStr = strings.TrimSpace(jsonStr)
+
+		var result ExtractionResult
+		if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
+			c.Log.Warnf("Failed to unmarshal JSON from LLM: %+v (String: %s)", err, jsonStr)
+			return nil, err
+		}
+		
+		c.Log.Infof("LLM extraction successful for '%s': relevant=%v", title, result.IsRelevant)
+		return &result, nil
 	}
-
-	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
-		return nil, fmt.Errorf("no content returned from LLM")
-	}
-
-	part := resp.Candidates[0].Content.Parts[0]
-	text, ok := part.(genai.Text)
-	if !ok {
-		return nil, fmt.Errorf("unexpected LLM response format")
-	}
-
-	jsonStr := strings.TrimPrefix(string(text), "```json\n")
-	jsonStr = strings.TrimSuffix(jsonStr, "\n```")
-	jsonStr = strings.TrimSpace(jsonStr)
-
-	var result ExtractionResult
-	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
-		c.Log.Warnf("Failed to unmarshal JSON from LLM: %+v (String: %s)", err, jsonStr)
-		return nil, err
-	}
-
-	c.Log.Infof("LLM extraction successful for '%s': relevant=%v", title, result.IsRelevant)
-	return &result, nil
+	return nil, lastErr
 }
