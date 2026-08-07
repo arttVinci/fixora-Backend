@@ -8,6 +8,7 @@ import (
 	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/infra"
 	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/model"
 	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/usecase"
+	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/utils"
 	region_client "github.com/arttVinci/fixora-Backend/internal/modules/region-client"
 	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report-client"
 	"github.com/arttVinci/fixora-Backend/internal/shared/client"
@@ -85,6 +86,9 @@ func (w *CrawlerWorker) RunCrawler() {
 		}
 
 		for _, article := range articles {
+			if utils.ArticleRssFilter(article) {
+				continue
+			}
 			if _, exists := allArticles[article.URL]; !exists {
 				allArticles[article.URL] = article
 			}
