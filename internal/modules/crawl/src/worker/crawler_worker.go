@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"encoding/json"
-	"sync"
 	"time"
 
 	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/infra"
@@ -111,93 +110,198 @@ func (w *CrawlerWorker) RunCrawler() error {
 	return nil
 }
 
+// processArticles memproses artikel secara sequential (satu per satu).
+// Cocok untuk Gemini free tier yang punya rate limit ketat (~15 RPM + daily quota).
+// Kalau sudah upgrade ke paid tier, ganti panggilan di RunCrawler ke processArticlesConcurrent.
 func (w *CrawlerWorker) processArticles(ctx context.Context, articles map[string]infra.RSSArticle) {
-	var wg sync.WaitGroup
-	semaphore := make(chan struct{}, 2) // Keep low to avoid thundering herd on LLM API rate limits
+	total := len(articles)
+	processed := 0
 
 	for _, article := range articles {
 		if w.CrawlerUseCase.IsArticleProcessed(ctx, article.URL) {
 			continue
 		}
 
-		wg.Add(1)
-		semaphore <- struct{}{}
+		processed++
+		w.Log.Infof("Processing article %d/%d: %s", processed, total, article.Title)
 
-		go func(art infra.RSSArticle) {
-			defer wg.Done()
-			defer func() { <-semaphore }()
+		artCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 
-			artCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-			defer cancel()
+		crawledAt := time.Now()
+		publishedAt := parsePublishedAt(article.PublishedAt)
 
-			crawledAt := time.Now()
-			publishedAt := parsePublishedAt(art.PublishedAt)
+		extraction, err := w.LlmClient.ExtractNewsInfo(artCtx, article.Title, article.Content)
+		if err != nil || extraction == nil {
+			_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, article.URL, article.Title, article.Content, article.SourceName, "llm_extraction_failed", publishedAt, crawledAt)
+			cancel()
+			continue
+		}
 
-			extraction, err := w.LlmClient.ExtractNewsInfo(artCtx, art.Title, art.Content)
-			if err != nil || extraction == nil {
-				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "llm_extraction_failed", publishedAt, crawledAt)
-				return
-			}
+		if !extraction.IsRelevant {
+			_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, article.URL, article.Title, article.Content, article.SourceName, "not_relevant", publishedAt, crawledAt)
+			cancel()
+			continue
+		}
 
-			if !extraction.IsRelevant {
-				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "not_relevant", publishedAt, crawledAt)
-				return
-			}
+		category, err := w.ReportClient.GetCategoryBySlug(w.CrawlerUseCase.DB.WithContext(artCtx), extraction.Category)
+		if err != nil || category == nil {
+			_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, article.URL, article.Title, article.Content, article.SourceName, "category_not_found", publishedAt, crawledAt)
+			cancel()
+			continue
+		}
 
-			category, err := w.ReportClient.GetCategoryBySlug(w.CrawlerUseCase.DB.WithContext(artCtx), extraction.Category)
-			if err != nil || category == nil {
-				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "category_not_found", publishedAt, crawledAt)
-				return
-			}
+		geocode, err := w.NominatimClient.Geocode(artCtx, extraction.Location)
+		if err != nil || geocode == nil {
+			_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, article.URL, article.Title, article.Content, article.SourceName, "geocoding_failed", publishedAt, crawledAt)
+			cancel()
+			continue
+		}
 
-			geocode, err := w.NominatimClient.Geocode(artCtx, extraction.Location)
-			if err != nil || geocode == nil {
-				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "geocoding_failed", publishedAt, crawledAt)
-				return
-			}
+		reverseGeocode, err := w.NominatimClient.ReverseGeocode(artCtx, geocode.Latitude, geocode.Longitude)
+		if err != nil || reverseGeocode == nil {
+			_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, article.URL, article.Title, article.Content, article.SourceName, "reverse_geocoding_failed", publishedAt, crawledAt)
+			cancel()
+			continue
+		}
 
-			reverseGeocode, err := w.NominatimClient.ReverseGeocode(artCtx, geocode.Latitude, geocode.Longitude)
-			if err != nil || reverseGeocode == nil {
-				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "reverse_geocoding_failed", publishedAt, crawledAt)
-				return
-			}
+		village, err := w.RegionClient.ResolveVillageByAddress(
+			w.CrawlerUseCase.DB.WithContext(artCtx),
+			reverseGeocode.Village,
+			reverseGeocode.District,
+			reverseGeocode.City,
+			reverseGeocode.Province,
+		)
+		if err != nil || village == nil {
+			_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, article.URL, article.Title, article.Content, article.SourceName, "village_not_resolved", publishedAt, crawledAt)
+			cancel()
+			continue
+		}
 
-			village, err := w.RegionClient.ResolveVillageByAddress(
-				w.CrawlerUseCase.DB.WithContext(artCtx),
-				reverseGeocode.Village,
-				reverseGeocode.District,
-				reverseGeocode.City,
-				reverseGeocode.Province,
-			)
-			if err != nil || village == nil {
-				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "village_not_resolved", publishedAt, crawledAt)
-				return
-			}
+		req := &model.ProcessCrawledArticleRequest{
+			URL:          article.URL,
+			Title:        article.Title,
+			Content:      article.Content,
+			SourceName:   article.SourceName,
+			PublishedAt:  publishedAt,
+			CrawledAt:    crawledAt,
+			CategoryID:   category.ID,
+			CategorySlug: category.Slug,
+			VillageID:    village.ID,
+			Latitude:     geocode.Latitude,
+			Longitude:    geocode.Longitude,
+			Address:      reverseGeocode.FullAddress,
+			Severity:     extraction.Severity,
+		}
 
-			req := &model.ProcessCrawledArticleRequest{
-				URL:          art.URL,
-				Title:        art.Title,
-				Content:      art.Content,
-				SourceName:   art.SourceName,
-				PublishedAt:  publishedAt,
-				CrawledAt:    crawledAt,
-				CategoryID:   category.ID,
-				CategorySlug: category.Slug,
-				VillageID:    village.ID,
-				Latitude:     geocode.Latitude,
-				Longitude:    geocode.Longitude,
-				Address:      reverseGeocode.FullAddress,
-				Severity:     extraction.Severity,
-			}
+		if err := w.CrawlerUseCase.SaveCrawledReport(artCtx, req); err != nil {
+			w.Log.Warnf("Failed to save crawled report: %+v", err)
+		}
 
-			if err := w.CrawlerUseCase.SaveCrawledReport(artCtx, req); err != nil {
-				w.Log.Warnf("Failed to save crawled report: %+v", err)
-			}
-		}(article)
+		cancel()
 	}
 
-	wg.Wait()
+	w.Log.Infof("Crawler finished. Processed %d/%d articles.", processed, total)
 }
+
+// ====================================================================================
+// processArticlesConcurrent — versi concurrent dengan goroutine + semaphore.
+// Gunakan ini kalau sudah upgrade ke paid tier Gemini (RPM lebih tinggi).
+//
+// Cara pakai:
+//   1. Tambahkan "sync" ke import
+//   2. Di RunCrawler(), ganti w.processArticles(ctx, allArticles)
+//      menjadi w.processArticlesConcurrent(ctx, allArticles)
+//   3. Sesuaikan semaphore size & rate limiter interval di llm_client.go
+//      sesuai RPM tier baru (misal paid tier 1000 RPM → semaphore 10, limiter 100ms)
+// ====================================================================================
+//
+// func (w *CrawlerWorker) processArticlesConcurrent(ctx context.Context, articles map[string]infra.RSSArticle) {
+// 	var wg sync.WaitGroup
+// 	semaphore := make(chan struct{}, 5)
+//
+// 	for _, article := range articles {
+// 		if w.CrawlerUseCase.IsArticleProcessed(ctx, article.URL) {
+// 			continue
+// 		}
+//
+// 		wg.Add(1)
+// 		semaphore <- struct{}{}
+//
+// 		go func(art infra.RSSArticle) {
+// 			defer wg.Done()
+// 			defer func() { <-semaphore }()
+//
+// 			artCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+// 			defer cancel()
+//
+// 			crawledAt := time.Now()
+// 			publishedAt := parsePublishedAt(art.PublishedAt)
+//
+// 			extraction, err := w.LlmClient.ExtractNewsInfo(artCtx, art.Title, art.Content)
+// 			if err != nil || extraction == nil {
+// 				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "llm_extraction_failed", publishedAt, crawledAt)
+// 				return
+// 			}
+//
+// 			if !extraction.IsRelevant {
+// 				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "not_relevant", publishedAt, crawledAt)
+// 				return
+// 			}
+//
+// 			category, err := w.ReportClient.GetCategoryBySlug(w.CrawlerUseCase.DB.WithContext(artCtx), extraction.Category)
+// 			if err != nil || category == nil {
+// 				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "category_not_found", publishedAt, crawledAt)
+// 				return
+// 			}
+//
+// 			geocode, err := w.NominatimClient.Geocode(artCtx, extraction.Location)
+// 			if err != nil || geocode == nil {
+// 				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "geocoding_failed", publishedAt, crawledAt)
+// 				return
+// 			}
+//
+// 			reverseGeocode, err := w.NominatimClient.ReverseGeocode(artCtx, geocode.Latitude, geocode.Longitude)
+// 			if err != nil || reverseGeocode == nil {
+// 				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "reverse_geocoding_failed", publishedAt, crawledAt)
+// 				return
+// 			}
+//
+// 			village, err := w.RegionClient.ResolveVillageByAddress(
+// 				w.CrawlerUseCase.DB.WithContext(artCtx),
+// 				reverseGeocode.Village,
+// 				reverseGeocode.District,
+// 				reverseGeocode.City,
+// 				reverseGeocode.Province,
+// 			)
+// 			if err != nil || village == nil {
+// 				_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, art.URL, art.Title, art.Content, art.SourceName, "village_not_resolved", publishedAt, crawledAt)
+// 				return
+// 			}
+//
+// 			req := &model.ProcessCrawledArticleRequest{
+// 				URL:          art.URL,
+// 				Title:        art.Title,
+// 				Content:      art.Content,
+// 				SourceName:   art.SourceName,
+// 				PublishedAt:  publishedAt,
+// 				CrawledAt:    crawledAt,
+// 				CategoryID:   category.ID,
+// 				CategorySlug: category.Slug,
+// 				VillageID:    village.ID,
+// 				Latitude:     geocode.Latitude,
+// 				Longitude:    geocode.Longitude,
+// 				Address:      reverseGeocode.FullAddress,
+// 				Severity:     extraction.Severity,
+// 			}
+//
+// 			if err := w.CrawlerUseCase.SaveCrawledReport(artCtx, req); err != nil {
+// 				w.Log.Warnf("Failed to save crawled report: %+v", err)
+// 			}
+// 		}(article)
+// 	}
+//
+// 	wg.Wait()
+// }
 
 func parsePublishedAt(value string) time.Time {
 	if value == "" {

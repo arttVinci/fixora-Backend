@@ -37,7 +37,7 @@ func NewLlmClient(log *logrus.Logger, genaiClient *genai.Client) LlmClient {
 
 const maxRetries = 3
 
-var llmLimiter = rate.NewLimiter(rate.Every(5*time.Second), 1)
+var llmLimiter = rate.NewLimiter(rate.Every(15*time.Second), 1)
 
 func Limitter(ctx context.Context) error {
 	return llmLimiter.Wait(ctx)
