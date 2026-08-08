@@ -75,7 +75,7 @@ func (w *CrawlerWorker) RunCrawler() error {
 	defer cancel()
 
 	categories, err := w.ReportClient.GetAllCategories(w.CrawlerUseCase.DB.WithContext(ctx))
-	if err != nil {
+	if err != nil || len(categories) <= 0 {
 		w.Log.Warnf("Failed to fetch categories: %+v", err)
 		return err
 	}
