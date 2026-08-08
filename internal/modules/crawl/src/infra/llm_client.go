@@ -62,7 +62,7 @@ func (c *llmClientImpl) ExtractNewsInfo(ctx context.Context, title, content stri
 			},
 			"category": {
 				Type:        genai.TypeString,
-				Description: "Slug kategori masalah: jalan-rusak, sampah",
+				Description: "Slug kategori masalah: jalan-rusak, sampah, drainase-tersumbat, jembatan-rusak, bangunan-terbengkalai",
 			},
 			"severity": {
 				Type:        genai.TypeString,
@@ -85,7 +85,7 @@ Isi Berita: %s
 Panduan:
 1. is_relevant harus true hanya jika berita melaporkan kerusakan nyata saat ini.
 2. location harus alamat/area spesifik. Jika hanya provinsi/negara, is_relevant false.
-3. category wajib salah satu slug: jalan-rusak, sampah.
+3. category wajib salah satu slug: jalan-rusak, sampah, drainase-tersumbat, jembatan-rusak, bangunan-terbengkalai.
 4. severity wajib salah satu: ringan, sedang, parah.
 
 Balas JSON sesuai schema.`, title, content)
