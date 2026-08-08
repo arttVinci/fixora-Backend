@@ -1,0 +1,33 @@
+{
+  "app": {
+    "name": "fixora"
+  },
+  "web": {
+    "prefork": false,
+    "port": 8080
+  },
+  "log": {
+    "level": 6
+  },
+  "database": {
+    "username": "username_db",
+    "password": "password_db",
+    "host": "fixora_mysql", // jangan dirubah
+    "port": 3306,
+    "name": "database_name",
+    "pool": {
+      "idle": 10,
+      "max": 100,
+      "lifetime": 300
+    }
+  },
+  "jwt": {
+    "secret": "buat_aja_ngasal"
+  },
+  "group": {
+    "id": "fixora"
+  },
+  "google_ai_studio": {
+    "api_key": "api_key_ai_studio"
+  }
+}
