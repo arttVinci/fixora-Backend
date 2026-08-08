@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 
+	"github.com/arttVinci/fixora-Backend/internal/modules/crawl"
+	"github.com/arttVinci/fixora-Backend/internal/modules/region"
+	"github.com/arttVinci/fixora-Backend/internal/modules/report"
 	"github.com/arttVinci/fixora-Backend/internal/shared/config"
 	module "github.com/arttVinci/fixora-Backend/internal/shared/modules"
 )
@@ -25,16 +28,21 @@ import (
 func main() {
 	viperConfig := config.NewViper()
 	log := config.NewLogger(viperConfig)
-	// db := config.NewDatabase(viperConfig, log)
-	// validate := config.NewValidator(viperConfig)
+	db := config.NewDatabase(viperConfig, log)
+	validate := config.NewValidator(viperConfig)
 	app := config.NewFiber(viperConfig)
+	genai := config.NewGoogleAiStudio(viperConfig)
 
 	// Module initialization (ordered by dependency)
-	
+	reportModule := report.New(db, log, validate, viperConfig)
+	regionModule := region.New(db, log)
+	crawlModule := crawl.New(db, log, validate, viperConfig, genai, reportModule.Client(), regionModule.Client())
 
 	// Register all modules
 	modules := []module.Module{
-	
+		reportModule,
+		regionModule,
+		crawlModule,
 	}
 
 	// Auto-migration (each module migrates its own tables)
@@ -45,10 +53,10 @@ func main() {
 	}
 
 	// Route registration
-	// api := app.Group("/api")
-	// for _, m := range modules {
-	// 	m.RegisterRoutes(api)
-	// }
+	api := app.Group("/api")
+	for _, m := range modules {
+		m.RegisterRoutes(api)
+	}
 
 	// Start server
 	port := viperConfig.GetInt("web.port")

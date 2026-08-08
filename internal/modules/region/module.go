@@ -1,35 +1,43 @@
 package region
 
 import (
+	region_client "github.com/arttVinci/fixora-Backend/internal/modules/region-client"
 	"github.com/arttVinci/fixora-Backend/internal/modules/region/src/entity"
 	"github.com/arttVinci/fixora-Backend/internal/modules/region/src/repository"
-	"github.com/gofiber/fiber/v2"
+	"github.com/arttVinci/fixora-Backend/internal/modules/region/src/seeder"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
 type Module struct {
-	DB                *gorm.DB
-	Log               *logrus.Logger
-	VillageRepository *repository.VillageRepository
+	db     *gorm.DB
+	log    *logrus.Logger
+	client *clientImpl
 }
 
-func NewModule(db *gorm.DB, log *logrus.Logger) *Module {
+func New(db *gorm.DB, log *logrus.Logger) *Module {
+	villageRepo := repository.NewVillageRepository(log)
 	return &Module{
-		DB:                db,
-		Log:               log,
-		VillageRepository: repository.NewVillageRepository(log),
+		client: &clientImpl{VillageRepository: villageRepo},
+		db:     db,
+		log:    log,
 	}
 }
 
-func (m *Module) RegisterRoutes(router fiber.Router, authMiddleware fiber.Handler) {
+func (m *Module) Client() region_client.Client {
+	return m.client
 }
 
 func (m *Module) Migrate() error {
-	return m.DB.AutoMigrate(
+	if err := m.db.AutoMigrate(
 		&entity.Province{},
 		&entity.City{},
 		&entity.District{},
 		&entity.Village{},
-	)
+	); err != nil {
+		return err
+	}
+
+	s := seeder.NewRegionSeeder(m.db, m.log)
+	return s.SeedIfEmpty()
 }

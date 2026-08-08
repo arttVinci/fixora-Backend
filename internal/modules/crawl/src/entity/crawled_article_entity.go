@@ -4,7 +4,7 @@ import "time"
 
 type CrawledArticle struct {
 	ID           string     `gorm:"column:id;primaryKey;type:varchar(100)"`
-	URL          string     `gorm:"column:url;type:varchar(1000);not null;uniqueIndex"`
+	URL 		 string 	`gorm:"column:url;type:varchar(700);not null;uniqueIndex"`
 	Title        string     `gorm:"column:title;type:varchar(500);not null"`
 	Content      *string    `gorm:"column:content;type:text"`
 	SourceName   string     `gorm:"column:source_name;type:varchar(100);not null"`
