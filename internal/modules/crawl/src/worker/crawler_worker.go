@@ -80,7 +80,7 @@ func (w *CrawlerWorker) RunCrawler() error {
 		return err
 	}
 
-	const activeRegion = "Jakarta" 
+	const activeRegion = "Jawa Barat" 
 	
 	allArticles := make(map[string]infra.RSSArticle)
 	for _, category := range categories {

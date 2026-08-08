@@ -38,7 +38,7 @@ func (r *VillageRepository) FindByHierarchy(db *gorm.DB, item *entity.Village, v
 
 	if err := base.Session(&gorm.Session{}).
 		Where("LOWER(districts.name) = LOWER(?)", districtName).
-		Where("LOWER(cities.name) = LOWER(?)", cityName).
+		Where("(LOWER(cities.name) = LOWER(?) OR LOWER(cities.name) LIKE LOWER(CONCAT('% ', ?)))", cityName, cityName).
 		Where("LOWER(provinces.name) = LOWER(?)", provinceName).
 		Order("villages.id ASC").
 		Take(item).Error; err == nil {
@@ -48,7 +48,7 @@ func (r *VillageRepository) FindByHierarchy(db *gorm.DB, item *entity.Village, v
 	}
 
 	if err := base.Session(&gorm.Session{}).
-		Where("LOWER(cities.name) = LOWER(?)", cityName).
+		Where("(LOWER(cities.name) = LOWER(?) OR LOWER(cities.name) LIKE LOWER(CONCAT('% ', ?)))", cityName, cityName).
 		Where("LOWER(provinces.name) = LOWER(?)", provinceName).
 		Order("villages.id ASC").
 		Take(item).Error; err == nil {

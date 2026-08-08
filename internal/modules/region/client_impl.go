@@ -46,18 +46,36 @@ func (c *clientImpl) ResolveVillageByAddress(tx *gorm.DB, villageName, districtN
 
 func normalizeRegionName(value string) string {
 	value = strings.TrimSpace(value)
-	prefixes := []string{
-		"Kelurahan ",
-		"Desa ",
-		"Kecamatan ",
-		"Kota ",
-		"Kabupaten ",
+	if value == "" {
+		return value
 	}
 
-	for _, prefix := range prefixes {
-		if strings.HasPrefix(strings.ToLower(value), strings.ToLower(prefix)) {
-			return strings.TrimSpace(value[len(prefix):])
+	// Kata-kata designation administratif wilayah Indonesia.
+	// Distrip iteratif dari depan, jadi kombinasi apa pun otomatis ke-handle
+	// tanpa perlu hardcode compound prefix (e.g. "Kota Administrasi").
+	adminWords := map[string]bool{
+		"kabupaten":    true,
+		"kab.":         true,
+		"kota":         true,
+		"kecamatan":    true,
+		"kelurahan":    true,
+		"desa":         true,
+		"administrasi": true,
+		"adm.":         true,
+	}
+
+	for {
+		spaceIdx := strings.Index(value, " ")
+		if spaceIdx == -1 {
+			break // sisa satu kata = pasti nama, jangan strip
 		}
+
+		firstWord := strings.ToLower(value[:spaceIdx])
+		if !adminWords[firstWord] {
+			break
+		}
+
+		value = strings.TrimSpace(value[spaceIdx+1:])
 	}
 
 	return value

@@ -52,7 +52,7 @@ func isRateLimitError(err error) bool {
 }
 
 func (c *llmClientImpl) ExtractNewsInfo(ctx context.Context, title, content string) (*ExtractionResult, error) {
-	model := c.Genai.GenerativeModel("gemini-3.6-flash")
+	model := c.Genai.GenerativeModel("gemini-3.5-flash-lite")
 	model.ResponseSchema = &genai.Schema{
 		Type: genai.TypeObject,
 		Properties: map[string]*genai.Schema{
@@ -62,7 +62,7 @@ func (c *llmClientImpl) ExtractNewsInfo(ctx context.Context, title, content stri
 			},
 			"category": {
 				Type:        genai.TypeString,
-				Description: "Slug kategori masalah: jalan-rusak, jembatan-rusak, sampah-menumpuk, bangunan-terbengkalai, drainase-tersumbat.",
+				Description: "Slug kategori masalah: jalan-rusak, sampah",
 			},
 			"severity": {
 				Type:        genai.TypeString,
@@ -85,7 +85,7 @@ Isi Berita: %s
 Panduan:
 1. is_relevant harus true hanya jika berita melaporkan kerusakan nyata saat ini.
 2. location harus alamat/area spesifik. Jika hanya provinsi/negara, is_relevant false.
-3. category wajib salah satu slug: jalan-rusak, jembatan-rusak, sampah-menumpuk, bangunan-terbengkalai, drainase-tersumbat.
+3. category wajib salah satu slug: jalan-rusak, sampah.
 4. severity wajib salah satu: ringan, sedang, parah.
 
 Balas JSON sesuai schema.`, title, content)
@@ -104,7 +104,7 @@ Balas JSON sesuai schema.`, title, content)
 			// Cek apakah errornya karena Rate Limit (429)
 			if isRateLimitError(err) {
 				backoff := time.Duration(15*(attempt+1)) * time.Second
-				c.Log.Warnf("LLM Rate limit hit (429). Retrying attempt %d/%d after %v...", attempt+1, maxRetries, backoff)
+				c.Log.Warnf("LLM Rate limit hit: %v. Retrying attempt %d/%d after %v...", err, attempt+1, maxRetries, backoff)
 
 				// Context-aware sleep — don't hang if context is already cancelled
 				select {
