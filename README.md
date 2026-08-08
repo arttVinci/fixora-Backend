@@ -139,12 +139,44 @@ Mengambil data titik laporan infrastruktur untuk tampilan peta interaktif berdas
 GET http://127.0.0.1:8080/api/reports/map?min_lat=-7.8&max_lat=-6.2&min_lng=106.4&max_lng=108.8
 ```
 
+**Contoh Response Payload:**
+
+```json
+{
+  "data": [
+    {
+      "id": "RPT-jalan-rusak-20260808-ba00",
+      "title": "Pemkot Bekasi Alokasikan Rp200 Miliar untuk Perbaikan Jalan Rusak - MetroTVNews.com",
+      "latitude": -6.2349858,
+      "longitude": 106.9945444,
+      "severity": "sedang",
+      "category_slug": "jalan-rusak",
+      "status": "pending_verification",
+      "primary_photo_url": "",
+      "source_type": "ai_news"
+    }
+  ],
+  "message": "Berhasil menampilkan data peta",
+  "success": true
+}
+```
+
 #### 2. Trigger AI News Crawler (Manual)
 
 Memicu proses AI News Crawler secara manual untuk mencari berita kerusakan infrastruktur di background.
 
 - **Method:** `POST`
 - **Path:** `/api/crawl/trigger`
+
+**Contoh Response Payload:**
+
+```json
+{
+  "data": null,
+  "message": "Crawler berhasil di-trigger, berjalan di background",
+  "success": true
+}
+```
 
 ---
 
