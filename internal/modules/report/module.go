@@ -41,7 +41,7 @@ func (m *Module) Migrate() error {
 		&entity.Report{},
 		&entity.ReportPhoto{},
 		&entity.ReportConfirmation{},
-		&entity.MergeLog{},
+		&entity.DuplicateReport{},
 	); err != nil {
 		return err
 	}
