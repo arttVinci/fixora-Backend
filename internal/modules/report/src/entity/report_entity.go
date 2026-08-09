@@ -29,8 +29,8 @@ type Report struct {
 	Photos              []ReportPhoto        `gorm:"foreignKey:ReportID;references:ID"`
 	MergedReport        *Report              `gorm:"foreignKey:MergedIntoID;references:ID"`
 	ReportConfirmations []ReportConfirmation `gorm:"foreignKey:ReportID;references:ID"`
-	MergeLogsAsChild    []MergeLog           `gorm:"foreignKey:ReportID;references:ID"`
-	MergeLogsAsParent   []MergeLog           `gorm:"foreignKey:DuplicateOfReportID;references:ID"`
+	DuplicatesAsChild  []DuplicateReport `gorm:"foreignKey:ReportID;references:ID"`
+	DuplicatesAsParent []DuplicateReport `gorm:"foreignKey:ParentID;references:ID"`
 }
 
 func (Report) TableName() string {
