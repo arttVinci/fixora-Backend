@@ -105,6 +105,10 @@ func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *model.Proce
 		return fiber.NewError(fiber.StatusInternalServerError, "Gagal menyimpan data sistem crawler")
 	}
 
+	if err := c.ReportClient.CheckDuplicate(c.DB.WithContext(ctx), reportRes.ID); err != nil {
+		c.Log.Warnf("Duplicate check failed for report %s : %+v", reportRes.ID, err)
+	}
+
 	return nil
 }
 
