@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/entity"
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/model"
 	shared_repo "github.com/arttVinci/fixora-Backend/internal/shared/repository"
@@ -117,4 +119,28 @@ func (r *ReportRepository) FilterList(request *model.SearchReportListRequest) fu
 
 		return tx
 	}
+}
+
+func (r *ReportRepository) FindNearbyByCategory(db *gorm.DB, lat, lng float64, radiusMeters float64, categoryID string, excludeID string, since time.Time) ([]entity.Report, error) {
+	var items []entity.Report
+	haversine := "(6371000 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude))))"
+
+	err := db.
+		Preload("Photos").
+		Where("category_id = ?", categoryID).
+		Where("merged_into_id IS NULL").
+		Where("id != ?", excludeID).
+		Where("first_reported_at >= ?", since).
+		Where(haversine+" <= ?", lat, lng, lat, radiusMeters).
+		Limit(20).
+		Find(&items).Error
+
+	if err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *ReportRepository) SetMergedInto(db *gorm.DB, reportID string, parentID string) error {
+	return db.Model(&entity.Report{}).Where("id = ?", reportID).Update("merged_into_id", parentID).Error
 }
