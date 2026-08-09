@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 
+	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/entity"
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/model"
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/model/converter"
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/repository"
@@ -31,6 +32,22 @@ func NewReportUseCase(
 		Validate:         validate,
 		ReportRepository: reportRepo,
 	}
+}
+
+func (c *ReportUseCase) GetDetail(ctx context.Context, id string) (*model.ReportDetailResponse, error) {
+	tx := c.DB.WithContext(ctx)
+
+	report := new(entity.Report)
+	if err := c.ReportRepository.FindDetailByID(tx, report, id); err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.Log.Warnf("Report not found : %+v", err)
+			return nil, fiber.NewError(fiber.StatusNotFound, "Laporan tidak ditemukan")
+		}
+		c.Log.Warnf("Failed to get report detail : %+v", err)
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal mengambil data laporan")
+	}
+
+	return converter.ReportToDetailResponse(report), nil
 }
 
 func (c *ReportUseCase) SearchMap(ctx context.Context, request *model.SearchReportMapRequest) ([]model.ReportMapResponse, error) {
