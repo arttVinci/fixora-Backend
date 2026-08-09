@@ -4,6 +4,7 @@ import (
 	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report-client"
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/entity"
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/repository"
+	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/usecase"
 	"gorm.io/gorm"
 )
 
@@ -11,6 +12,7 @@ type clientImpl struct {
 	db                 *gorm.DB
 	reportRepository   *repository.ReportRepository
 	categoryRepository *repository.CategoryRepository
+	duplicateUseCase   *usecase.DuplicateUseCase
 }
 
 func (c *clientImpl) CreateReport(tx *gorm.DB, req *report_client.ReportClientRequest) (*report_client.ReportClientResponse, error) {
@@ -72,4 +74,12 @@ func (c *clientImpl) GetCategoryBySlug(tx *gorm.DB, slug string) (*report_client
 		Name: category.Name,
 		Slug: category.Slug,
 	}, nil
+}
+
+func (c *clientImpl) CheckDuplicate(tx *gorm.DB, reportID string) error {
+	ctx := tx.Statement.Context
+	if ctx == nil {
+		ctx = tx.Statement.Context
+	}
+	return c.duplicateUseCase.CheckDuplicate(ctx, reportID)
 }

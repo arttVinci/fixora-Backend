@@ -8,6 +8,7 @@ import (
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/seeder"
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/usecase"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/generative-ai-go/genai"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
@@ -20,17 +21,25 @@ type Module struct {
 	log        *logrus.Logger
 }
 
-func New(db *gorm.DB, log *logrus.Logger, validate *validator.Validate, config *viper.Viper) *Module {
+func New(db *gorm.DB, log *logrus.Logger, validate *validator.Validate, config *viper.Viper, genaiClient *genai.Client) *Module {
 	reportRepo := repository.NewReportRepository(log)
 	categoryRepo := repository.NewCategoryRepository(log)
+	duplicateRepo := repository.NewDuplicateReportRepository(log)
+
 	reportUseCase := usecase.NewReportUseCase(db, log, validate, reportRepo)
+	duplicateUseCase := usecase.NewDuplicateUseCase(db, log, validate, reportRepo, duplicateRepo, genaiClient)
 	reportController := controller.NewReportController(reportUseCase, log)
 
 	return &Module{
 		Controller: reportController,
-		client:     &clientImpl{db: db, reportRepository: reportRepo, categoryRepository: categoryRepo},
-		db:         db,
-		log:        log,
+		client: &clientImpl{
+			db:                 db,
+			reportRepository:   reportRepo,
+			categoryRepository: categoryRepo,
+			duplicateUseCase:   duplicateUseCase,
+		},
+		db:  db,
+		log: log,
 	}
 }
 

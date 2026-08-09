@@ -34,7 +34,7 @@ func main() {
 	genai := config.NewGoogleAiStudio(viperConfig)
 
 	// Module initialization (ordered by dependency)
-	reportModule := report.New(db, log, validate, viperConfig)
+	reportModule := report.New(db, log, validate, viperConfig, genai)
 	regionModule := region.New(db, log)
 	crawlModule := crawl.New(db, log, validate, viperConfig, genai, reportModule.Client(), regionModule.Client())
 
