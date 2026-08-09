@@ -6,4 +6,5 @@ type Client interface {
 	CreateReport(tx *gorm.DB, req *ReportClientRequest) (*ReportClientResponse, error)
 	GetAllCategories(tx *gorm.DB) ([]CategoryClientResponse, error)
 	GetCategoryBySlug(tx *gorm.DB, slug string) (*CategoryClientResponse, error)
+	CheckDuplicate(tx *gorm.DB, reportID string) error
 }
