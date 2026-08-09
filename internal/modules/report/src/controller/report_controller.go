@@ -56,3 +56,30 @@ func (c *ReportController) SearchMap(ctx *fiber.Ctx) error {
 		Success: true,
 	})
 }
+
+// GetDetail godoc
+// @Summary      Get report detail
+// @Description  Get full detail of a single infrastructure report by ID
+// @Tags         reports
+// @Accept       json
+// @Produce      json
+// @Param        id path string true "Report ID"
+// @Success      200  {object}  response.WebResponse[model.ReportDetailResponse]
+// @Failure      404  {object}  response.WebResponse[any]
+// @Failure      500  {object}  response.WebResponse[any]
+// @Router       /api/v1/reports/{id} [get]
+func (c *ReportController) GetDetail(ctx *fiber.Ctx) error {
+	id := ctx.Params("id")
+
+	resp, err := c.UseCase.GetDetail(ctx.UserContext(), id)
+	if err != nil {
+		c.Log.Warnf("Failed to get report detail : %+v", err)
+		return err
+	}
+
+	return ctx.JSON(response.WebResponse[*model.ReportDetailResponse]{
+		Data:    resp,
+		Message: "Berhasil menampilkan detail laporan",
+		Success: true,
+	})
+}
