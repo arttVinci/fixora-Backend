@@ -250,7 +250,7 @@ func (u *DuplicateUseCase) getOrComputePHash(db *gorm.DB, photo *entity.ReportPh
 }
 
 func (u *DuplicateUseCase) evaluateWithLLM(ctx context.Context, newReport *entity.Report, candidates []entity.Report) (*llmDuplicateResult, error) {
-	model := u.Genai.GenerativeModel("gemini-2.0-flash")
+	model := u.Genai.GenerativeModel("gemini-3.5-flash")
 	model.ResponseSchema = &genai.Schema{
 		Type: genai.TypeObject,
 		Properties: map[string]*genai.Schema{
