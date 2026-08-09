@@ -10,8 +10,8 @@ type ReportMapResponse struct {
 	Severity        string  `json:"severity"`
 	CategorySlug    string  `json:"category_slug"`
 	Status          string  `json:"status"`
-	PrimaryPhotoURL string  `json:"primary_photo_url"`
-	SourceType      string  `json:"source_type"`
+	PhotoURL        string  `json:"photo_url"`
+	Source          string  `json:"source"`
 }
 
 type ReportDetailResponse struct {
@@ -23,13 +23,11 @@ type ReportDetailResponse struct {
 	Address            *string    `json:"address,omitempty"`
 	Severity           string     `json:"severity"`
 	Status             string     `json:"status"`
-	SourceType         string     `json:"source_type"`
-	ConfidenceScore    float64    `json:"confidence_score"`
-	BudgetInfo         *string    `json:"budget_info,omitempty"`
+	Source         	   string     `json:"source"`
 	CategoryName       string     `json:"category_name"`
 	CategorySlug       string     `json:"category_slug"`
-	PrimaryPhotoURL    string     `json:"primary_photo_url"`
-	AdditionalPhotos   []string   `json:"additional_photos,omitempty"`
+	PhotoURL           *string     `json:"photo_url"`
+	AdditionalPhotos   *[]string   `json:"additional_photos,omitempty"`
 	TotalConfirmations int64      `json:"total_confirmations"`
 	MergedIntoID       *string    `json:"merged_into_id,omitempty"`
 	FirstReportedAt    *time.Time `json:"first_reported_at"`

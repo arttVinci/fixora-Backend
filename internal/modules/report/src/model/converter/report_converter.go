@@ -31,8 +31,8 @@ func ReportToMapResponse(report *entity.Report) *model.ReportMapResponse {
 		Severity:        report.Severity,
 		CategorySlug:    categorySlug,
 		Status:          report.Status,
-		PrimaryPhotoURL: primaryPhoto,
-		SourceType:      report.SourceType,
+		PhotoURL:        primaryPhoto,
+		Source:          report.SourceType,
 	}
 }
 
@@ -69,13 +69,11 @@ func ReportToDetailResponse(report *entity.Report) *model.ReportDetailResponse {
 		Address:            report.Address,
 		Severity:           report.Severity,
 		Status:             report.Status,
-		SourceType:         report.SourceType,
-		ConfidenceScore:    report.ConfidenceScore,
-		BudgetInfo:         report.BudgetInfo,
+		Source:             report.SourceType,
 		CategoryName:       categoryName,
 		CategorySlug:       categorySlug,
-		PrimaryPhotoURL:    primaryPhoto,
-		AdditionalPhotos:   additionalPhotos,
+		PhotoURL:           &primaryPhoto,
+		AdditionalPhotos:   &additionalPhotos,
 		TotalConfirmations: totalConfirmations,
 		MergedIntoID:       report.MergedIntoID,
 		FirstReportedAt:    report.FirstReportedAt,
