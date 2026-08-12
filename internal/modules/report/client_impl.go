@@ -83,3 +83,39 @@ func (c *clientImpl) CheckDuplicate(tx *gorm.DB, reportID string) error {
 	}
 	return c.duplicateUseCase.CheckDuplicate(ctx, reportID)
 }
+
+func (c *clientImpl) UpdateReportStatus(tx *gorm.DB, reportID string, status string, rejectReason *string) error {
+	return c.reportRepository.UpdateStatus(tx, reportID, status, rejectReason)
+}
+
+func (c *clientImpl) GetReportByID(tx *gorm.DB, reportID string) (*report_client.ReportClientResponse, error) {
+	report := new(entity.Report)
+	if err := c.reportRepository.FindClientByID(tx, report, reportID); err != nil {
+		return nil, err
+	}
+	description := ""
+	if report.Description != nil {
+		description = *report.Description
+	}
+	address := ""
+	if report.Address != nil {
+		address = *report.Address
+	}
+	categorySlug := ""
+	categoryName := ""
+	if report.Category != nil {
+		categorySlug = report.Category.Slug
+		categoryName = report.Category.Name
+	}
+	photoURL := ""
+	for _, photo := range report.Photos {
+		if photo.IsPrimary {
+			photoURL = photo.PhotoURL
+			break
+		}
+	}
+	if photoURL == "" && len(report.Photos) > 0 {
+		photoURL = report.Photos[0].PhotoURL
+	}
+	return &report_client.ReportClientResponse{ID: report.ID, Title: report.Title, Description: description, Severity: report.Severity, CategorySlug: categorySlug, CategoryName: categoryName, SourceType: report.SourceType, PrimaryPhotoURL: photoURL, Address: address}, nil
+}
