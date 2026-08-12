@@ -8,8 +8,9 @@ import (
 	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/infra"
 	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/model"
 	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/repository"
-	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report-client"
 	region_client "github.com/arttVinci/fixora-Backend/internal/modules/region-client"
+	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report-client"
+	verification_client "github.com/arttVinci/fixora-Backend/internal/modules/verification-client"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/sirupsen/logrus"
@@ -23,6 +24,7 @@ type CrawlerUseCase struct {
 	CrawledArticleRepository *repository.CrawledRepository
 	ReportClient             report_client.Client
 	RegionClient             region_client.Client
+	VerificationClient       verification_client.Client
 }
 
 func NewCrawlerUseCase(
@@ -32,6 +34,7 @@ func NewCrawlerUseCase(
 	crawledRepo *repository.CrawledRepository,
 	reportClient report_client.Client,
 	regionClient region_client.Client,
+	verificationClient verification_client.Client,
 ) *CrawlerUseCase {
 	return &CrawlerUseCase{
 		DB:                       db,
@@ -40,6 +43,7 @@ func NewCrawlerUseCase(
 		CrawledArticleRepository: crawledRepo,
 		ReportClient:             reportClient,
 		RegionClient:             regionClient,
+		VerificationClient:       verificationClient,
 	}
 }
 
@@ -107,6 +111,10 @@ func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *model.Proce
 
 	if err := c.ReportClient.CheckDuplicate(c.DB.WithContext(ctx), reportRes.ID); err != nil {
 		c.Log.Warnf("Duplicate check failed for report %s : %+v", reportRes.ID, err)
+	} else if c.VerificationClient != nil {
+		if _, err := c.VerificationClient.CreateVerification(c.DB.WithContext(ctx), reportRes.ID); err != nil {
+			c.Log.Warnf("Verification created failed for report %s : %+v", reportRes.ID, err)
+		}
 	}
 
 	return nil
