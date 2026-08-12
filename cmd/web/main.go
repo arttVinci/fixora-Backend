@@ -6,6 +6,7 @@ import (
 	"github.com/arttVinci/fixora-Backend/internal/modules/crawl"
 	"github.com/arttVinci/fixora-Backend/internal/modules/region"
 	"github.com/arttVinci/fixora-Backend/internal/modules/report"
+	"github.com/arttVinci/fixora-Backend/internal/modules/verification"
 	"github.com/arttVinci/fixora-Backend/internal/shared/config"
 	module "github.com/arttVinci/fixora-Backend/internal/shared/modules"
 )
@@ -36,12 +37,14 @@ func main() {
 	// Module initialization (ordered by dependency)
 	reportModule := report.New(db, log, validate, viperConfig, genai)
 	regionModule := region.New(db, log)
-	crawlModule := crawl.New(db, log, validate, viperConfig, genai, reportModule.Client(), regionModule.Client())
+	verificationModule := verification.New(db, log, validate, viperConfig, genai, reportModule.Client())
+	crawlModule := crawl.New(db, log, validate, viperConfig, genai, reportModule.Client(), regionModule.Client(), verificationModule.Client())
 
 	// Register all modules
 	modules := []module.Module{
 		reportModule,
 		regionModule,
+		verificationModule,
 		crawlModule,
 	}
 
