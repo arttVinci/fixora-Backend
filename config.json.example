@@ -12,7 +12,7 @@
   "database": {
     "username": "username_db",
     "password": "password_db",
-    "host": "fixora_mysql", // jangan dirubah
+    "host": "fixora_mysql",
     "port": 3306,
     "name": "database_name",
     "pool": {
@@ -29,5 +29,16 @@
   },
   "google_ai_studio": {
     "api_key": "api_key_ai_studio"
+  },
+  "anthropic": {
+    "api_key": "anthropic_api_key"
+  },
+  "openai": {
+    "api_key": "openai_api_key"
+  },
+  "verification": {
+    "gemini_model": "gemini-2.0-flash",
+    "anthropic_model": "claude-3-5-sonnet-latest",
+    "openai_model": "gpt-4o-mini"
   }
 }
