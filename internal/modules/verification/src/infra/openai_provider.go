@@ -34,7 +34,13 @@ func (p *OpenAIProvider) AnalyzeAsManager(ctx context.Context, req *Verification
 	return p.analyze(ctx, "Manager/Hakim: putuskan final dari argumen advocate dan skeptic", req)
 }
 func (p *OpenAIProvider) analyze(ctx context.Context, role string, req *VerificationRequest) (*VerificationResult, error) {
-	body := map[string]any{"model": p.model, "messages": []map[string]string{{"role": "user", "content": rolePrompt(role, req)}}, "response_format": map[string]string{"type": "json_object"}}
+	body := map[string]any{
+		"model": p.model,
+		"messages": []map[string]string{
+			{"role": "user", "content": rolePrompt(role, req)}},
+		"response_format": map[string]string{"type": "json_object"},
+	}
+	
 	data, err := p.doJSON(ctx, "https://api.openai.com/v1/chat/completions", map[string]string{"Authorization": "Bearer " + p.apiKey}, body)
 	if err != nil {
 		return nil, err
