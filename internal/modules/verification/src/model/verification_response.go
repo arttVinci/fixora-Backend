@@ -2,6 +2,14 @@ package model
 
 import "time"
 
+type VerificationResult struct {
+	Verdict      bool    `json:"verdict"`
+	Confidence   float64 `json:"confidence"`
+	CategorySlug string  `json:"category_slug"`
+	Severity     string  `json:"severity"`
+	Argument     string  `json:"argument"`
+}
+
 type VerificationLogResponse struct {
 	ID           string     `json:"id"`
 	SessionID    string     `json:"session_id"`

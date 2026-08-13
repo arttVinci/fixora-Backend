@@ -6,8 +6,9 @@ type LLMProvider struct {
 }
 
 type LLMGenerateContentRequest struct {
-	Model   string
-	Content string
+	Model    string
+	Content  string
+	Provider string
 }
 
 type LLMRequest struct {

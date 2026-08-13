@@ -31,7 +31,7 @@ func NewLLMClient(config dto.LLMProvider, log *logrus.Logger) *LLMClient {
 	}
 }
 
-func (l *LLMClient) GenerateContent(ctx context.Context ,req dto.LLMGenerateContentRequest) (*dto.LLMGenerateContentResponse,error) {
+func (l *LLMClient) GenerateContent(ctx context.Context, req *dto.LLMGenerateContentRequest) (*dto.LLMGenerateContentResponse, error) {
 	if req.Content == "" {
 		l.log.Warnf("Invalid request : content is empty")
 		return nil, fiber.NewError(fiber.StatusBadRequest, "Content tidak boleh kosong")

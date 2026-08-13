@@ -2,6 +2,8 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"time"
 
 	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report-client"
@@ -10,6 +12,9 @@ import (
 	"github.com/arttVinci/fixora-Backend/internal/modules/verification/src/model"
 	"github.com/arttVinci/fixora-Backend/internal/modules/verification/src/model/converter"
 	"github.com/arttVinci/fixora-Backend/internal/modules/verification/src/repository"
+	"github.com/arttVinci/fixora-Backend/internal/modules/verification/src/utils"
+	"github.com/arttVinci/fixora-Backend/internal/shared/client"
+	"github.com/arttVinci/fixora-Backend/internal/shared/dto"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -24,13 +29,27 @@ type VerificationUseCase struct {
 	VerificationSessionRepository *repository.VerificationSessionRepository
 	VerificationLogRepository     *repository.VerificationLogRepository
 	ReportClient                  report_client.Client
-	AdvocateProvider              infra.LLMProvider
-	SkepticProvider               infra.LLMProvider
-	ManagerProvider               infra.LLMProvider
+	LLMClient                     client.LLMClient
 }
 
-func NewVerificationUseCase(db *gorm.DB, log *logrus.Logger, validate *validator.Validate, sr *repository.VerificationSessionRepository, lr *repository.VerificationLogRepository, rc report_client.Client, advocate, skeptic, manager infra.LLMProvider) *VerificationUseCase {
-	return &VerificationUseCase{db, log, validate, sr, lr, rc, advocate, skeptic, manager}
+func NewVerificationUseCase(
+	db *gorm.DB, 
+	log *logrus.Logger, 
+	validate *validator.Validate, 
+	verificationSessionRepository *repository.VerificationSessionRepository, 
+	verificationLogRepository *repository.VerificationLogRepository, 
+	reportClient report_client.Client, 
+	llmClient client.LLMClient,
+) *VerificationUseCase {
+	return &VerificationUseCase{
+		DB:                            db,
+		Log:                           log,
+		Validate:                      validate,
+		VerificationSessionRepository: verificationSessionRepository,
+		VerificationLogRepository:     verificationLogRepository,
+		ReportClient:                  reportClient,
+		LLMClient:                     llmClient,
+	}
 }
 
 func (c *VerificationUseCase) CreateVerification(ctx context.Context, reportID string) (*model.VerificationSessionResponse, error) {
@@ -59,13 +78,14 @@ func (c *VerificationUseCase) CreateVerification(ctx context.Context, reportID s
 
 	return converter.VerificationSessionToResponse(VerificationSessionEntity), nil
 }
-func (c *VerificationUseCase) RetrySession(ctx context.Context, ID string) (*model.VerificationSessionResponse, error) {
+
+func (c *VerificationUseCase) RetrySession(ctx context.Context, sessionID string) (*model.VerificationSessionResponse, error) {
 	tx := c.DB.WithContext(ctx).Begin()
 	defer tx.Rollback()
 
 	VerificationSessionEntity := new(entity.VerificationSession)
 	
-	if err := c.VerificationSessionRepository.FindById(tx, VerificationSessionEntity, ID); err != nil {
+	if err := c.VerificationSessionRepository.FindById(tx, VerificationSessionEntity, sessionID); err != nil {
 		c.Log.Warnf("Verification session not found : %+v", err)
 		return nil, fiber.NewError(fiber.StatusNotFound, "Sesi verifikasi tidak ditemukan")
 	}
@@ -91,59 +111,77 @@ func (c *VerificationUseCase) RetrySession(ctx context.Context, ID string) (*mod
 		c.Log.Warnf("Failed commit transaction : %+v", err)
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal memperbarui sesi verifikasi")
 	}
+
 	return converter.VerificationSessionToResponse(VerificationSessionEntity), nil
 }
+
 func (c *VerificationUseCase) GetSessionsByReportID(ctx context.Context, reportID string) ([]model.VerificationSessionResponse, error) {
 	items, err := c.VerificationSessionRepository.FindByReportIDWithLogs(c.DB.WithContext(ctx), reportID)
+
 	if err != nil {
 		c.Log.Warnf("Failed get verification sessions : %+v", err)
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal mengambil sesi verifikasi")
 	}
+
 	res := make([]model.VerificationSessionResponse, len(items))
 	for i := range items {
 		res[i] = *converter.VerificationSessionToResponse(&items[i])
 	}
+
 	return res, nil
 }
 
 func (c *VerificationUseCase) RunVerification(ctx context.Context, sessionID string) error {
 	tx := c.DB.WithContext(ctx).Begin()
 	defer tx.Rollback()
-	s := new(entity.VerificationSession)
-	if err := c.VerificationSessionRepository.FindById(tx, s, sessionID); err != nil {
-		return err
+
+	VerificationSessionEntity := new(entity.VerificationSession)
+
+	if err := c.VerificationSessionRepository.FindById(tx, VerificationSessionEntity, sessionID); err != nil {
+		c.Log.Warnf("Verification session not found : %+v", err)
+		return fiber.NewError(fiber.StatusNotFound, "Sesi verifikasi tidak ditemukan")
 	}
-	report, err := c.ReportClient.GetReportByID(tx, s.ReportID)
+
+	report, err := c.ReportClient.GetReportByID(tx, VerificationSessionEntity.ReportID)
 	if err != nil {
-		return c.markError(tx, s, err.Error())
+		c.Log.Warnf("Report not found : %+v", err)
+		return c.markError(tx, VerificationSessionEntity, err.Error())
 	}
+
 	now := time.Now()
 	if report.SourceType == "gov_data" {
 		verdict := true
 		reason := "gov_data"
-		s.Status = "approved"
-		s.FinalVerdict = &verdict
-		s.SkipReason = &reason
-		s.DecidedBy = &reason
-		s.StartedAt = &now
-		s.CompletedAt = &now
-		if err := c.ReportClient.UpdateReportStatus(tx, s.ReportID, "verified", nil); err != nil {
+
+		VerificationSessionEntity.Status = "approved"
+		VerificationSessionEntity.FinalVerdict = &verdict
+		VerificationSessionEntity.SkipReason = &reason
+		VerificationSessionEntity.DecidedBy = &reason
+		VerificationSessionEntity.StartedAt = &now
+		VerificationSessionEntity.CompletedAt = &now
+
+		if err := c.ReportClient.UpdateReportStatus(tx, VerificationSessionEntity.ReportID, "verified", nil); err != nil {
+			c.Log.Warnf("Failed update report status : %+v", err)
 			return err
 		}
-		if err := c.VerificationSessionRepository.Update(tx, s); err != nil {
+
+		if err := c.VerificationSessionRepository.Update(tx, VerificationSessionEntity); err != nil {
+			c.Log.Warnf("Failed update verification session : %+v", err)
 			return err
 		}
+
 		return tx.Commit().Error
 	}
 
-	s.Status = "in_progress"
-	s.StartedAt = &now
+	VerificationSessionEntity.Status = "in_progress"
+	VerificationSessionEntity.StartedAt = &now
 
-	if err := c.VerificationSessionRepository.Update(tx, s); err != nil {
+	if err := c.VerificationSessionRepository.Update(tx, VerificationSessionEntity); err != nil {
+		c.Log.Warnf("Failed update verification session : %+v", err)
 		return err
 	}
 
-	req := &infra.VerificationRequest{
+	req := &model.VerificationRequest{
 		ReportTitle:       report.Title,
 		ReportDescription: report.Description,
 		ReportSeverity:    report.Severity,
@@ -153,77 +191,128 @@ func (c *VerificationUseCase) RunVerification(ctx context.Context, sessionID str
 		ReportAddress:     report.Address,
 	}
 
-	adv, err := c.runAgent(ctx, tx, s.ID, "advocate", c.AdvocateProvider, req)
-	if err != nil {
-		return c.markError(tx, s, "advocate_failed")
+	advocateReq := &dto.LLMGenerateContentRequest{
+		Content:  utils.RolePrompt("advocate", req),
+		Provider: "CommandCode",
+		Model:    "qwen/qwen3.7-flash",
 	}
-	sk, err := c.runAgent(ctx, tx, s.ID, "skeptic", c.SkepticProvider, req)
+
+	advocateAgent, err := c.runAgent(ctx, VerificationSessionEntity.ID, "advocate", advocateReq)
 	if err != nil {
-		if adv.Confidence >= 0.9 && adv.Verdict {
-			return c.finalize(tx, s, adv, true, "consensus")
+		return c.markError(tx, VerificationSessionEntity, "advocate_failed")
+	}
+
+	skepticReq := &dto.LLMGenerateContentRequest{
+		Content:  utils.RolePrompt("skeptic", req),
+		Provider: "CommandCode",
+		Model:    "qwen/qwen3.7-flash",
+	}
+
+	skepticAgent, err := c.runAgent(ctx, VerificationSessionEntity.ID, "skeptic", skepticReq)
+	if err != nil {
+		if advocateAgent.Confidence >= 0.9 && advocateAgent.Verdict {
+			return c.finalize(tx, VerificationSessionEntity, advocateAgent, true, "consensus")
 		}
-		return c.markError(tx, s, "skeptic_failed")
+		return c.markError(tx, VerificationSessionEntity, "skeptic_failed")
 	}
-	req.AdvocateArgument = adv.Argument
-	req.AdvocateVerdict = adv.Verdict
-	req.AdvocateConfidence = adv.Confidence
-	req.SkepticArgument = sk.Argument
-	req.SkepticVerdict = sk.Verdict
-	req.SkepticConfidence = sk.Confidence
-	final := adv
+
+	req.AdvocateArgument = advocateAgent.Argument
+	req.AdvocateVerdict = advocateAgent.Verdict
+	req.AdvocateConfidence = advocateAgent.Confidence
+	req.SkepticArgument = skepticAgent.Argument
+	req.SkepticVerdict = skepticAgent.Verdict
+	req.SkepticConfidence = skepticAgent.Confidence
+
+	final := advocateAgent
 	by := "consensus"
-	if !(adv.Verdict == sk.Verdict && adv.Confidence >= 0.8 && sk.Confidence >= 0.8) {
-		final, err = c.runAgent(ctx, tx, s.ID, "manager", c.ManagerProvider, req)
+
+	if !(advocateAgent.Verdict == skepticAgent.Verdict && advocateAgent.Confidence >= 0.8 && skepticAgent.Confidence >= 0.8) {
+		managerReq := &dto.LLMGenerateContentRequest{
+			Content:  utils.RolePrompt("manager", req),
+			Provider: "CommandCode",
+			Model:    "qwen/qwen3.7-flash",
+		}
+		
+		final, err = c.runAgent(ctx, VerificationSessionEntity.ID, "manager", managerReq)
 		by = "manager"
 		if err != nil {
-			final = &infra.VerificationResult{Verdict: false, Confidence: 1, CategorySlug: adv.CategorySlug, Severity: adv.Severity, Argument: "verification_agent_error"}
+			final = &model.VerificationResult{
+				Verdict: false,
+				Confidence: 1,
+				CategorySlug: advocateAgent.CategorySlug,
+				Severity: advocateAgent.Severity,
+				Argument: "verification_agent_error",
+			}
+			c.Log.Warnf("Failed update verification session : %+v", err)
+			return c.markError(tx, VerificationSessionEntity, "manager_failed")
 		}
-	} else if !adv.Verdict {
-		final = sk
+	} else if !advocateAgent.Verdict {
+		final = skepticAgent
 	}
-	return c.finalize(tx, s, final, final.Verdict, by)
-}
-func (c *VerificationUseCase) runAgent(ctx context.Context, tx *gorm.DB, sid, role string, p infra.LLMProvider, req *infra.VerificationRequest) (*infra.VerificationResult, error) {
-	start := time.Now()
-	var r *infra.VerificationResult
-	var err error
 
-	if role == "advocate" {
-		r, err = p.AnalyzeAsAdvocate(ctx, req)
-	} else if role == "skeptic" {
-		r, err = p.AnalyzeAsSkeptic(ctx, req)
-	} else {
-		r, err = p.AnalyzeAsManager(ctx, req)
+	return c.finalize(tx, VerificationSessionEntity, final, final.Verdict, by)
+}
+
+func (c *VerificationUseCase) runAgent(ctx context.Context, sessionID string, role string, request *dto.LLMGenerateContentRequest) (*model.VerificationResult, error) {
+	tx := c.DB.WithContext(ctx).Begin()
+	defer tx.Rollback()
+
+	start := time.Now()
+
+	llmResponse, err := c.LLMClient.GenerateContent(ctx, request)
+	if err != nil {
+		c.Log.Warnf("Failed to call LLM provider : %+v", err)
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal menghubungi penyedia LLM")
 	}
+
+	verificationResult, err := parseResult(llmResponse)
+	if err != nil {
+		c.Log.Warnf("Failed to parse LLM response : %+v", err)
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal memproses respons dari LLM")
+	}
+
 	lat := time.Since(start).Milliseconds()
 
-	l := &entity.VerificationLog{
+	verificationLogEntity := &entity.VerificationLog{
 		ID:            uuid.NewString(),
-		SessionID:     sid,
+		SessionID:     sessionID,
 		AgentRole:     role,
-		LLMProvider: p.ProviderName(),
-		LLMModel:      p.ModelName(),
+		LLMProvider:   request.Provider,
+		LLMModel:      request.Model,
 		LatencyMs:     lat,
+		PromptUsed:    role,
 	}
 
 	if err != nil {
-		e := err.Error()
-		l.RawArgument = ""
-		l.PromptUsed = role
-		l.ErrorMessage = &e
-		_ = c.VerificationLogRepository.Create(tx, l)
+        errMsg := err.Error()
+        verificationLogEntity.ErrorMessage = &errMsg
+        verificationLogEntity.RawArgument = ""
+
+        if logErr := c.VerificationLogRepository.Create(tx, verificationLogEntity); logErr != nil {
+            c.Log.Warnf("Failed create error verification log : %+v", logErr)
+        }
+        
+        tx.Commit()
+        return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal memproses respons agen: "+errMsg)
+    }
+
+	verificationLogEntity.Verdict = &verificationResult.Verdict
+	verificationLogEntity.Confidence = verificationResult.Confidence
+	verificationLogEntity.CategorySlug = &verificationResult.CategorySlug
+	verificationLogEntity.Severity = &verificationResult.Severity
+	verificationLogEntity.RawArgument = verificationResult.Argument
+
+	if err := c.VerificationLogRepository.Create(tx, verificationLogEntity); err != nil {
+		c.Log.Warnf("Failed create verification log : %+v", err)
 		return nil, err
 	}
-	l.Verdict = &r.Verdict
-	l.Confidence = r.Confidence
-	l.CategorySlug = &r.CategorySlug
-	l.Severity = &r.Severity
-	l.RawArgument = r.Argument
-	l.PromptUsed = role
-	if err := c.VerificationLogRepository.Create(tx, l); err != nil {
-		return nil, err
-	}
-	return r, nil
+
+	if err := tx.Commit().Error; err != nil {
+        c.Log.Warnf("Failed to commit transaction : %+v", err)
+        return nil, err
+    }
+
+	return verificationResult, nil
 }
 func (c *VerificationUseCase) finalize(tx *gorm.DB, s *entity.VerificationSession, r *infra.VerificationResult, verdict bool, by string) error {
 	now := time.Now()
@@ -263,4 +352,23 @@ func (c *VerificationUseCase) markError(tx *gorm.DB, s *entity.VerificationSessi
 }
 func (c *VerificationUseCase) FindPending(ctx context.Context, limit int) ([]entity.VerificationSession, error) {
 	return c.VerificationSessionRepository.FindPending(c.DB.WithContext(ctx), limit)
+}
+
+func parseResult(text *dto.LLMGenerateContentResponse) (*model.VerificationResult, error) {
+	start := strings.Index(text.Content, "{")
+	end := strings.LastIndex(text.Content, "}")
+	if start >= 0 && end >= start {
+		text.Content = text.Content[start : end+1]
+	}
+	var r model.VerificationResult
+	if err := json.Unmarshal([]byte(text.Content), &r); err != nil {
+		return nil, err
+	}
+	if r.Confidence < 0 {
+		r.Confidence = 0
+	}
+	if r.Confidence > 1 {
+		r.Confidence = 1
+	}
+	return &r, nil
 }

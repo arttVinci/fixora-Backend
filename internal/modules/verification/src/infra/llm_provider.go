@@ -14,22 +14,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-type VerificationRequest struct {
-	ReportTitle, ReportDescription, ReportSeverity, ReportCategory, ReportSourceType, ReportPhotoURL, ReportAddress string
-	AdvocateArgument                                                                                                string
-	AdvocateVerdict                                                                                                 bool
-	AdvocateConfidence                                                                                              float64
-	SkepticArgument                                                                                                 string
-	SkepticVerdict                                                                                                  bool
-	SkepticConfidence                                                                                               float64
-}
-type VerificationResult struct {
-	Verdict      bool    `json:"verdict"`
-	Confidence   float64 `json:"confidence"`
-	CategorySlug string  `json:"category_slug"`
-	Severity     string  `json:"severity"`
-	Argument     string  `json:"argument"`
-}
+
 type LLMProvider interface {
 	AnalyzeAsAdvocate(context.Context, *VerificationRequest) (*VerificationResult, error)
 	AnalyzeAsSkeptic(context.Context, *VerificationRequest) (*VerificationResult, error)
