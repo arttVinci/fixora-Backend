@@ -8,7 +8,6 @@ import (
 
 	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report-client"
 	"github.com/arttVinci/fixora-Backend/internal/modules/verification/src/entity"
-	"github.com/arttVinci/fixora-Backend/internal/modules/verification/src/infra"
 	"github.com/arttVinci/fixora-Backend/internal/modules/verification/src/model"
 	"github.com/arttVinci/fixora-Backend/internal/modules/verification/src/model/converter"
 	"github.com/arttVinci/fixora-Backend/internal/modules/verification/src/repository"
@@ -232,7 +231,7 @@ func (c *VerificationUseCase) RunVerification(ctx context.Context, sessionID str
 			Provider: "CommandCode",
 			Model:    "qwen/qwen3.7-flash",
 		}
-		
+
 		final, err = c.runAgent(ctx, VerificationSessionEntity.ID, "manager", managerReq)
 		by = "manager"
 		if err != nil {
@@ -314,42 +313,45 @@ func (c *VerificationUseCase) runAgent(ctx context.Context, sessionID string, ro
 
 	return verificationResult, nil
 }
-func (c *VerificationUseCase) finalize(tx *gorm.DB, s *entity.VerificationSession, r *infra.VerificationResult, verdict bool, by string) error {
+
+func (c *VerificationUseCase) finalize(tx *gorm.DB, verificationSessionEntity *entity.VerificationSession, r *model.VerificationResult, verdict bool, by string) error {
 	now := time.Now()
-	s.FinalVerdict = &verdict
-	s.FinalCategorySlug = &r.CategorySlug
-	s.FinalSeverity = &r.Severity
-	s.FinalReasoning = &r.Argument
-	s.DecidedBy = &by
-	s.CompletedAt = &now
+	verificationSessionEntity.FinalVerdict = &verdict
+	verificationSessionEntity.FinalCategorySlug = &r.CategorySlug
+	verificationSessionEntity.FinalReasoning = &r.Argument
+	verificationSessionEntity.DecidedBy = &by
+	verificationSessionEntity.CompletedAt = &now
 	status := "verified"
 	rejectReason := (*string)(nil)
 	if verdict {
-		s.Status = "approved"
+		verificationSessionEntity.Status = "approved"
 	} else {
-		s.Status = "rejected"
+		verificationSessionEntity.Status = "rejected"
 		status = "rejected"
 		rejectReason = &r.Argument
-		s.RejectReason = &r.Argument
+		verificationSessionEntity.RejectReason = &r.Argument
 	}
-	if err := c.ReportClient.UpdateReportStatus(tx, s.ReportID, status, rejectReason); err != nil {
+	if err := c.ReportClient.UpdateReportStatus(tx, verificationSessionEntity.ReportID, status, rejectReason); err != nil {
 		return err
 	}
-	if err := c.VerificationSessionRepository.Update(tx, s); err != nil {
+	if err := c.VerificationSessionRepository.Update(tx, verificationSessionEntity); err != nil {
 		return err
 	}
 	return tx.Commit().Error
 }
-func (c *VerificationUseCase) markError(tx *gorm.DB, s *entity.VerificationSession, msg string) error {
+
+func (c *VerificationUseCase) markError(tx *gorm.DB, verificationSessionEntity *entity.VerificationSession, msg string) error {
 	now := time.Now()
-	s.Status = "error"
-	s.RejectReason = &msg
-	s.CompletedAt = &now
-	if err := c.VerificationSessionRepository.Update(tx, s); err != nil {
+	verificationSessionEntity.Status = "error"
+	verificationSessionEntity.RejectReason = &msg
+	verificationSessionEntity.CompletedAt = &now
+	if err := c.VerificationSessionRepository.Update(tx, verificationSessionEntity); err != nil {
+		c.Log.Warnf("Failed update verification session : %+v", err)
 		return err
 	}
 	return tx.Commit().Error
 }
+
 func (c *VerificationUseCase) FindPending(ctx context.Context, limit int) ([]entity.VerificationSession, error) {
 	return c.VerificationSessionRepository.FindPending(c.DB.WithContext(ctx), limit)
 }
