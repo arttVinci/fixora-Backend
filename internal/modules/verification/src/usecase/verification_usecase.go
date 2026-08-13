@@ -37,48 +37,61 @@ func (c *VerificationUseCase) CreateVerification(ctx context.Context, reportID s
 	tx := c.DB.WithContext(ctx).Begin()
 	defer tx.Rollback()
 
-	if s, err := c.VerificationSessionRepository.FindActiveByReportID(tx, reportID); err == nil {
-		return converter.VerificationSessionToResponse(s), nil
+	if VerificationSessionEntity, err := c.VerificationSessionRepository.FindActiveByReportID(tx, reportID); err == nil {
+		return converter.VerificationSessionToResponse(VerificationSessionEntity), nil
 	}
 
-	s := &entity.VerificationSession{ID: uuid.NewString(), ReportID: reportID, Status: "pending"}
-	if err := c.VerificationSessionRepository.Create(tx, s); err != nil {
+	VerificationSessionEntity := &entity.VerificationSession{
+		ID:         uuid.NewString(),
+		ReportID:   reportID,
+		Status:     "pending",
+	}
+
+	if err := c.VerificationSessionRepository.Create(tx, VerificationSessionEntity); err != nil {
 		c.Log.Warnf("Failed create verification session : %+v", err)
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal membuat sesi verifikasi")
 	}
+
 	if err := tx.Commit().Error; err != nil {
 		c.Log.Warnf("Failed commit transaction : %+v", err)
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal membuat sesi verifikasi")
 	}
-	return converter.VerificationSessionToResponse(s), nil
+
+	return converter.VerificationSessionToResponse(VerificationSessionEntity), nil
 }
-func (c *VerificationUseCase) RetrySession(ctx context.Context, sessionID string) (*model.VerificationSessionResponse, error) {
+func (c *VerificationUseCase) RetrySession(ctx context.Context, ID string) (*model.VerificationSessionResponse, error) {
 	tx := c.DB.WithContext(ctx).Begin()
 	defer tx.Rollback()
-	s := new(entity.VerificationSession)
-	if err := c.VerificationSessionRepository.FindById(tx, s, sessionID); err != nil {
+
+	VerificationSessionEntity := new(entity.VerificationSession)
+	
+	if err := c.VerificationSessionRepository.FindById(tx, VerificationSessionEntity, ID); err != nil {
 		c.Log.Warnf("Verification session not found : %+v", err)
 		return nil, fiber.NewError(fiber.StatusNotFound, "Sesi verifikasi tidak ditemukan")
 	}
-	if s.Status != "error" {
+
+	if VerificationSessionEntity.Status != "error" {
 		return nil, fiber.NewError(fiber.StatusBadRequest, "Hanya sesi error yang dapat diulang")
 	}
-	s.Status = "pending"
-	s.FinalVerdict = nil
-	s.FinalReasoning = nil
-	s.RejectReason = nil
-	s.DecidedBy = nil
-	s.StartedAt = nil
-	s.CompletedAt = nil
-	if err := c.VerificationSessionRepository.Update(tx, s); err != nil {
+
+	VerificationSessionEntity.Status = "pending"
+	VerificationSessionEntity.FinalVerdict = nil
+	VerificationSessionEntity.FinalReasoning = nil
+	VerificationSessionEntity.RejectReason = nil
+	VerificationSessionEntity.DecidedBy = nil
+	VerificationSessionEntity.StartedAt = nil
+	VerificationSessionEntity.CompletedAt = nil
+
+	if err := c.VerificationSessionRepository.Update(tx, VerificationSessionEntity); err != nil {
 		c.Log.Warnf("Failed update verification session : %+v", err)
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal memperbarui sesi verifikasi")
 	}
+
 	if err := tx.Commit().Error; err != nil {
 		c.Log.Warnf("Failed commit transaction : %+v", err)
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal memperbarui sesi verifikasi")
 	}
-	return converter.VerificationSessionToResponse(s), nil
+	return converter.VerificationSessionToResponse(VerificationSessionEntity), nil
 }
 func (c *VerificationUseCase) GetSessionsByReportID(ctx context.Context, reportID string) ([]model.VerificationSessionResponse, error) {
 	items, err := c.VerificationSessionRepository.FindByReportIDWithLogs(c.DB.WithContext(ctx), reportID)
