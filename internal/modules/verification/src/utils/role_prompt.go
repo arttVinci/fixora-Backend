@@ -54,7 +54,7 @@ func RolePrompt(role string, req *model.VerificationRequest) string {
 	sb.WriteString(`Jawab HANYA dengan JSON valid, tanpa teks lain di luar JSON, dengan field:
 - verdict (boolean): true jika laporan ini valid untuk ditayangkan
 - confidence (number, 0.0-1.0): seberapa yakin kamu dengan verdict ini
-- category_slug (string): salah satu dari ["jalan-rusak","jembatan","sampah","bangunan-mangkrak","drainase","lainnya"]
+- category_slug (string): salah satu dari ["jalan-rusak","jembatan-rusak","sampah","bangunan-terbengkalai","lainnya"]
 - severity (string): salah satu dari ["ringan","sedang","parah"]
 - argument (string): alasan singkat (maksimal 2 kalimat), berdasarkan bukti yang diberikan saja
 

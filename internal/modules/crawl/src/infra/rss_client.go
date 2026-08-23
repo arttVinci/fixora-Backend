@@ -3,6 +3,8 @@ package infra
 import (
 	"context"
 	"net/url"
+	"regexp"
+	"strings"
 
 	"github.com/mmcdole/gofeed"
 	"github.com/sirupsen/logrus"
@@ -40,9 +42,9 @@ func (c *rssClientImpl) FetchArticles(ctx context.Context, keyword string) ([]RS
 
 	articles := make([]RSSArticle, 0, len(feed.Items))
 	for _, item := range feed.Items {
-		content := item.Description
+		content := cleanRSSContent(item.Description)
 		if content == "" {
-			content = item.Title
+			content = strings.TrimSpace(item.Title)
 		}
 
 		articles = append(articles, RSSArticle{
@@ -55,4 +57,19 @@ func (c *rssClientImpl) FetchArticles(ctx context.Context, keyword string) ([]RS
 	}
 
 	return articles, nil
+}
+
+var htmlTagRegex = regexp.MustCompile(`(?i)<[^>]*>`)
+
+// cleanRSSContent strips HTML tags/entities from Google News RSS descriptions,
+// leaving plain readable text so the LLM extraction prompt gets clean input.
+func cleanRSSContent(raw string) string {
+	raw = htmlTagRegex.ReplaceAllString(raw, " ")
+	raw = strings.ReplaceAll(raw, "&nbsp;", " ")
+	raw = strings.ReplaceAll(raw, "&amp;", "&")
+	raw = strings.ReplaceAll(raw, "&quot;", `"`)
+	raw = strings.ReplaceAll(raw, "&#39;", "'")
+	raw = strings.ReplaceAll(raw, "&lt;", "<")
+	raw = strings.ReplaceAll(raw, "&gt;", ">")
+	return strings.Join(strings.Fields(raw), " ")
 }
