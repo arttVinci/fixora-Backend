@@ -4,7 +4,6 @@ import (
 	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report-client"
 	verification_client "github.com/arttVinci/fixora-Backend/internal/modules/verification-client"
 	"github.com/arttVinci/fixora-Backend/internal/modules/verification/src/entity"
-	"github.com/arttVinci/fixora-Backend/internal/modules/verification/src/infra"
 	"github.com/arttVinci/fixora-Backend/internal/modules/verification/src/repository"
 	"github.com/arttVinci/fixora-Backend/internal/modules/verification/src/usecase"
 	"github.com/arttVinci/fixora-Backend/internal/modules/verification/src/worker"
@@ -26,7 +25,7 @@ type Module struct {
 func New(db *gorm.DB, log *logrus.Logger, validate *validator.Validate, config *viper.Viper, genaiClient *genai.Client, reportClient report_client.Client) *Module {
 	sr := repository.NewVerificationSessionRepository(log)
 	lr := repository.NewVerificationLogRepository(log)
-	uc := usecase.NewVerificationUseCase(db, log, validate, sr, lr, reportClient, infra.NewGeminiProvider(config, genaiClient), infra.NewAnthropicProvider(config), infra.NewOpenAIProvider(config))
+	uc := usecase.NewVerificationUseCase(db, log, validate, sr, lr, reportClient)
 	return &Module{db: db, log: log, UseCase: uc, worker: worker.NewVerificationWorker(log, uc), client: &clientImpl{useCase: uc}}
 }
 func (m *Module) Migrate() error {

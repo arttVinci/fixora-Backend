@@ -1,7 +1,7 @@
 package verification
 
 import (
-	"github.com/arttVinci/fixora-Backend/internal/shared/response"
+	"github.com/arttVinci/fixora-Backend/internal/shared/dto"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -28,7 +28,7 @@ func (m *Module) triggerVerification(ctx *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return ctx.JSON(response.WebResponse[any]{Data: resp, Message: "Berhasil memicu verifikasi", Success: true})
+	return ctx.JSON(dto.WebResponse[any]{Data: resp, Message: "Berhasil memicu verifikasi", Success: true})
 }
 
 // RetrySession godoc
@@ -46,7 +46,7 @@ func (m *Module) retrySession(ctx *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return ctx.JSON(response.WebResponse[any]{Data: resp, Message: "Berhasil mengulang verifikasi", Success: true})
+	return ctx.JSON(dto.WebResponse[any]{Data: resp, Message: "Berhasil mengulang verifikasi", Success: true})
 }
 
 // GetSessionsByReportID godoc
@@ -64,5 +64,5 @@ func (m *Module) getSessionsByReportID(ctx *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return ctx.JSON(response.WebResponse[any]{Data: resp, Message: "Berhasil menampilkan sesi verifikasi", Success: true})
+	return ctx.JSON(dto.WebResponse[any]{Data: resp, Message: "Berhasil menampilkan sesi verifikasi", Success: true})
 }
