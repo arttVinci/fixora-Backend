@@ -28,17 +28,17 @@ type VerificationUseCase struct {
 	VerificationSessionRepository *repository.VerificationSessionRepository
 	VerificationLogRepository     *repository.VerificationLogRepository
 	ReportClient                  report_client.Client
-	LLMClient                     client.LLMClient
+	LLMClient                     *client.LLMClient
 }
 
 func NewVerificationUseCase(
-	db *gorm.DB, 
-	log *logrus.Logger, 
-	validate *validator.Validate, 
-	verificationSessionRepository *repository.VerificationSessionRepository, 
-	verificationLogRepository *repository.VerificationLogRepository, 
-	reportClient report_client.Client, 
-	llmClient client.LLMClient,
+	db *gorm.DB,
+	log *logrus.Logger,
+	validate *validator.Validate,
+	verificationSessionRepository *repository.VerificationSessionRepository,
+	verificationLogRepository *repository.VerificationLogRepository,
+	reportClient report_client.Client,
+	llmClient *client.LLMClient,
 ) *VerificationUseCase {
 	return &VerificationUseCase{
 		DB:                            db,
@@ -60,9 +60,9 @@ func (c *VerificationUseCase) CreateVerification(ctx context.Context, reportID s
 	}
 
 	VerificationSessionEntity := &entity.VerificationSession{
-		ID:         uuid.NewString(),
-		ReportID:   reportID,
-		Status:     "pending",
+		ID:       uuid.NewString(),
+		ReportID: reportID,
+		Status:   "pending",
 	}
 
 	if err := c.VerificationSessionRepository.Create(tx, VerificationSessionEntity); err != nil {
@@ -83,7 +83,7 @@ func (c *VerificationUseCase) RetrySession(ctx context.Context, sessionID string
 	defer tx.Rollback()
 
 	VerificationSessionEntity := new(entity.VerificationSession)
-	
+
 	if err := c.VerificationSessionRepository.FindById(tx, VerificationSessionEntity, sessionID); err != nil {
 		c.Log.Warnf("Verification session not found : %+v", err)
 		return nil, fiber.NewError(fiber.StatusNotFound, "Sesi verifikasi tidak ditemukan")
@@ -131,6 +131,13 @@ func (c *VerificationUseCase) GetSessionsByReportID(ctx context.Context, reportI
 }
 
 func (c *VerificationUseCase) RunVerification(ctx context.Context, sessionID string) error {
+	if c.LLMClient == nil {
+		c.Log.Warnf("LLM client is not configured, skipping verification for session %s", sessionID)
+		return fiber.NewError(fiber.StatusInternalServerError, "LLM client belum dikonfigurasi")
+	}
+
+	// Phase 1: Load session and report data, mark as in_progress, then commit
+	// so other workers won't pick the same session.
 	tx := c.DB.WithContext(ctx).Begin()
 	defer tx.Rollback()
 
@@ -161,25 +168,36 @@ func (c *VerificationUseCase) RunVerification(ctx context.Context, sessionID str
 
 		if err := c.ReportClient.UpdateReportStatus(tx, VerificationSessionEntity.ReportID, "verified", nil); err != nil {
 			c.Log.Warnf("Failed update report status : %+v", err)
-			return err
+			return fiber.NewError(fiber.StatusInternalServerError, "Gagal memperbarui status laporan")
 		}
 
 		if err := c.VerificationSessionRepository.Update(tx, VerificationSessionEntity); err != nil {
 			c.Log.Warnf("Failed update verification session : %+v", err)
-			return err
+			return fiber.NewError(fiber.StatusInternalServerError, "Gagal memperbarui sesi verifikasi")
 		}
 
-		return tx.Commit().Error
+		if err := tx.Commit().Error; err != nil {
+			c.Log.Warnf("Failed commit transaction : %+v", err)
+			return fiber.NewError(fiber.StatusInternalServerError, "Gagal memperbarui sesi verifikasi")
+		}
+		return nil
 	}
 
+	// Mark as in_progress and commit so other workers see this status
 	VerificationSessionEntity.Status = "in_progress"
 	VerificationSessionEntity.StartedAt = &now
 
 	if err := c.VerificationSessionRepository.Update(tx, VerificationSessionEntity); err != nil {
 		c.Log.Warnf("Failed update verification session : %+v", err)
-		return err
+		return fiber.NewError(fiber.StatusInternalServerError, "Gagal memperbarui sesi verifikasi")
 	}
 
+	if err := tx.Commit().Error; err != nil {
+		c.Log.Warnf("Failed commit transaction : %+v", err)
+		return fiber.NewError(fiber.StatusInternalServerError, "Gagal memperbarui sesi verifikasi")
+	}
+
+	// Phase 2: Run LLM agents (I/O heavy, no open transaction held)
 	req := &model.VerificationRequest{
 		ReportTitle:       report.Title,
 		ReportDescription: report.Description,
@@ -198,7 +216,7 @@ func (c *VerificationUseCase) RunVerification(ctx context.Context, sessionID str
 
 	advocateAgent, err := c.runAgent(ctx, VerificationSessionEntity.ID, "advocate", advocateReq)
 	if err != nil {
-		return c.markError(tx, VerificationSessionEntity, "advocate_failed")
+		return c.markErrorNewTx(ctx, VerificationSessionEntity, "advocate_failed")
 	}
 
 	skepticReq := &dto.LLMGenerateContentRequest{
@@ -210,9 +228,9 @@ func (c *VerificationUseCase) RunVerification(ctx context.Context, sessionID str
 	skepticAgent, err := c.runAgent(ctx, VerificationSessionEntity.ID, "skeptic", skepticReq)
 	if err != nil {
 		if advocateAgent.Confidence >= 0.9 && advocateAgent.Verdict {
-			return c.finalize(tx, VerificationSessionEntity, advocateAgent, true, "consensus")
+			return c.finalizeNewTx(ctx, VerificationSessionEntity, advocateAgent, true, "consensus")
 		}
-		return c.markError(tx, VerificationSessionEntity, "skeptic_failed")
+		return c.markErrorNewTx(ctx, VerificationSessionEntity, "skeptic_failed")
 	}
 
 	req.AdvocateArgument = advocateAgent.Argument
@@ -235,89 +253,94 @@ func (c *VerificationUseCase) RunVerification(ctx context.Context, sessionID str
 		final, err = c.runAgent(ctx, VerificationSessionEntity.ID, "manager", managerReq)
 		by = "manager"
 		if err != nil {
-			final = &model.VerificationResult{
-				Verdict: false,
-				Confidence: 1,
-				CategorySlug: advocateAgent.CategorySlug,
-				Severity: advocateAgent.Severity,
-				Argument: "verification_agent_error",
-			}
-			c.Log.Warnf("Failed update verification session : %+v", err)
-			return c.markError(tx, VerificationSessionEntity, "manager_failed")
+			c.Log.Warnf("Manager agent failed for session %s : %+v", VerificationSessionEntity.ID, err)
+			return c.markErrorNewTx(ctx, VerificationSessionEntity, "manager_failed")
 		}
 	} else if !advocateAgent.Verdict {
 		final = skepticAgent
 	}
 
-	return c.finalize(tx, VerificationSessionEntity, final, final.Verdict, by)
+	return c.finalizeNewTx(ctx, VerificationSessionEntity, final, final.Verdict, by)
 }
 
 func (c *VerificationUseCase) runAgent(ctx context.Context, sessionID string, role string, request *dto.LLMGenerateContentRequest) (*model.VerificationResult, error) {
-	tx := c.DB.WithContext(ctx).Begin()
-	defer tx.Rollback()
-
 	start := time.Now()
 
-	llmResponse, err := c.LLMClient.GenerateContent(ctx, request)
-	if err != nil {
-		c.Log.Warnf("Failed to call LLM provider : %+v", err)
-		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal menghubungi penyedia LLM")
-	}
-
-	verificationResult, err := parseResult(llmResponse)
-	if err != nil {
-		c.Log.Warnf("Failed to parse LLM response : %+v", err)
-		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal memproses respons dari LLM")
-	}
+	llmResponse, llmErr := c.LLMClient.GenerateContent(ctx, request)
 
 	lat := time.Since(start).Milliseconds()
 
+	// Build the log entity shell — we always want to persist a log entry
 	verificationLogEntity := &entity.VerificationLog{
-		ID:            uuid.NewString(),
-		SessionID:     sessionID,
-		AgentRole:     role,
-		LLMProvider:   request.Provider,
-		LLMModel:      request.Model,
-		LatencyMs:     lat,
-		PromptUsed:    role,
+		ID:          uuid.NewString(),
+		SessionID:   sessionID,
+		AgentRole:   role,
+		LLMProvider: request.Provider,
+		LLMModel:    request.Model,
+		LatencyMs:   lat,
+		PromptUsed:  role,
 	}
 
-	if err != nil {
-        errMsg := err.Error()
-        verificationLogEntity.ErrorMessage = &errMsg
-        verificationLogEntity.RawArgument = ""
+	// If LLM call failed, save error log and return
+	if llmErr != nil {
+		c.Log.Warnf("Failed to call LLM provider : %+v", llmErr)
+		errMsg := llmErr.Error()
+		verificationLogEntity.ErrorMessage = &errMsg
+		verificationLogEntity.RawArgument = ""
+		c.saveVerificationLog(ctx, verificationLogEntity)
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal menghubungi penyedia LLM")
+	}
 
-        if logErr := c.VerificationLogRepository.Create(tx, verificationLogEntity); logErr != nil {
-            c.Log.Warnf("Failed create error verification log : %+v", logErr)
-        }
-        
-        tx.Commit()
-        return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal memproses respons agen: "+errMsg)
-    }
+	// Parse result
+	verificationResult, parseErr := parseResult(llmResponse)
+	if parseErr != nil {
+		c.Log.Warnf("Failed to parse LLM response : %+v", parseErr)
+		errMsg := parseErr.Error()
+		verificationLogEntity.ErrorMessage = &errMsg
+		verificationLogEntity.RawArgument = llmResponse.Content
+		c.saveVerificationLog(ctx, verificationLogEntity)
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal memproses respons dari LLM")
+	}
 
+	// Success — fill result fields and save
 	verificationLogEntity.Verdict = &verificationResult.Verdict
 	verificationLogEntity.Confidence = verificationResult.Confidence
 	verificationLogEntity.CategorySlug = &verificationResult.CategorySlug
 	verificationLogEntity.Severity = &verificationResult.Severity
 	verificationLogEntity.RawArgument = verificationResult.Argument
 
-	if err := c.VerificationLogRepository.Create(tx, verificationLogEntity); err != nil {
+	c.saveVerificationLog(ctx, verificationLogEntity)
+
+	return verificationResult, nil
+}
+
+// saveVerificationLog persists a verification log entry in its own transaction.
+func (c *VerificationUseCase) saveVerificationLog(ctx context.Context, logEntity *entity.VerificationLog) {
+	tx := c.DB.WithContext(ctx).Begin()
+	defer tx.Rollback()
+
+	if err := c.VerificationLogRepository.Create(tx, logEntity); err != nil {
 		c.Log.Warnf("Failed create verification log : %+v", err)
-		return nil, err
+		return
 	}
 
 	if err := tx.Commit().Error; err != nil {
-        c.Log.Warnf("Failed to commit transaction : %+v", err)
-        return nil, err
-    }
+		c.Log.Warnf("Failed commit verification log transaction : %+v", err)
+	}
+}
 
-	return verificationResult, nil
+// finalizeNewTx opens a fresh transaction to finalize a verification session.
+func (c *VerificationUseCase) finalizeNewTx(ctx context.Context, session *entity.VerificationSession, r *model.VerificationResult, verdict bool, by string) error {
+	tx := c.DB.WithContext(ctx).Begin()
+	defer tx.Rollback()
+	return c.finalize(tx, session, r, verdict, by)
 }
 
 func (c *VerificationUseCase) finalize(tx *gorm.DB, verificationSessionEntity *entity.VerificationSession, r *model.VerificationResult, verdict bool, by string) error {
 	now := time.Now()
 	verificationSessionEntity.FinalVerdict = &verdict
 	verificationSessionEntity.FinalCategorySlug = &r.CategorySlug
+	verificationSessionEntity.FinalSeverity = &r.Severity
 	verificationSessionEntity.FinalReasoning = &r.Argument
 	verificationSessionEntity.DecidedBy = &by
 	verificationSessionEntity.CompletedAt = &now
@@ -332,12 +355,25 @@ func (c *VerificationUseCase) finalize(tx *gorm.DB, verificationSessionEntity *e
 		verificationSessionEntity.RejectReason = &r.Argument
 	}
 	if err := c.ReportClient.UpdateReportStatus(tx, verificationSessionEntity.ReportID, status, rejectReason); err != nil {
-		return err
+		c.Log.Warnf("Failed update report status : %+v", err)
+		return fiber.NewError(fiber.StatusInternalServerError, "Gagal memperbarui status laporan")
 	}
 	if err := c.VerificationSessionRepository.Update(tx, verificationSessionEntity); err != nil {
-		return err
+		c.Log.Warnf("Failed update verification session : %+v", err)
+		return fiber.NewError(fiber.StatusInternalServerError, "Gagal memperbarui sesi verifikasi")
 	}
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		c.Log.Warnf("Failed commit transaction : %+v", err)
+		return fiber.NewError(fiber.StatusInternalServerError, "Gagal memperbarui sesi verifikasi")
+	}
+	return nil
+}
+
+// markErrorNewTx opens a fresh transaction to mark a session as error.
+func (c *VerificationUseCase) markErrorNewTx(ctx context.Context, session *entity.VerificationSession, msg string) error {
+	tx := c.DB.WithContext(ctx).Begin()
+	defer tx.Rollback()
+	return c.markError(tx, session, msg)
 }
 
 func (c *VerificationUseCase) markError(tx *gorm.DB, verificationSessionEntity *entity.VerificationSession, msg string) error {
@@ -347,9 +383,13 @@ func (c *VerificationUseCase) markError(tx *gorm.DB, verificationSessionEntity *
 	verificationSessionEntity.CompletedAt = &now
 	if err := c.VerificationSessionRepository.Update(tx, verificationSessionEntity); err != nil {
 		c.Log.Warnf("Failed update verification session : %+v", err)
-		return err
+		return fiber.NewError(fiber.StatusInternalServerError, "Gagal memperbarui sesi verifikasi")
 	}
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		c.Log.Warnf("Failed commit transaction : %+v", err)
+		return fiber.NewError(fiber.StatusInternalServerError, "Gagal memperbarui sesi verifikasi")
+	}
+	return nil
 }
 
 func (c *VerificationUseCase) FindPending(ctx context.Context, limit int) ([]entity.VerificationSession, error) {

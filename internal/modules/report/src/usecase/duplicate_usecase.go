@@ -174,12 +174,10 @@ func (u *DuplicateUseCase) CheckDuplicate(ctx context.Context, reportID string) 
 		}
 	}
 
-	// 5. Fallback: If LLM unavailable/skipped and candidates exist with no photo conflict
+	// 5. Fallback: If LLM unavailable/skipped and candidates exist, do NOT auto-merge
+	// without evidence. Log and skip to avoid incorrectly merging distinct reports.
 	if matchedParentID == "" && len(llmCandidates) > 0 {
-		// Use the first coarse match as location-based duplicate
-		matchedParentID = llmCandidates[0].ID
-		matchReason = "similar_location"
-		matchScore = 0.60
+		u.Log.Infof("No confident duplicate match for report %s — %d candidates exist but no photo/LLM evidence, skipping merge", reportID, len(llmCandidates))
 	}
 
 	// 6. Execute Merge if match found
@@ -226,7 +224,12 @@ func (u *DuplicateUseCase) getOrComputePHash(db *gorm.DB, photo *entity.ReportPh
 		}
 	}
 
-	resp, err := http.Get(photo.PhotoURL)
+	if !strings.HasPrefix(photo.PhotoURL, "https://") {
+		return nil, fmt.Errorf("invalid photo URL scheme (must be https): %s", photo.PhotoURL)
+	}
+
+	httpClient := &http.Client{Timeout: 15 * time.Second}
+	resp, err := httpClient.Get(photo.PhotoURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch photo URL %s: %w", photo.PhotoURL, err)
 	}
