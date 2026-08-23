@@ -1,5 +1,13 @@
 package report_client
 
 type ReportClientResponse struct {
-	ID string
+	ID              string
+	Title           string
+	Description     string
+	Severity        string
+	CategorySlug    string
+	CategoryName    string
+	SourceType      string
+	PrimaryPhotoURL string
+	Address         string
 }

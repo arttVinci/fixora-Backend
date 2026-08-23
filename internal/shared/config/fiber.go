@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/arttVinci/fixora-Backend/internal/shared/response"
+	"github.com/arttVinci/fixora-Backend/internal/shared/dto"
 	"github.com/gofiber/fiber/v2"
 	"github.com/spf13/viper"
 	fiberSwagger "github.com/swaggo/fiber-swagger"
@@ -32,7 +32,7 @@ func NewErrorHandler() fiber.ErrorHandler {
 			message = e.Message
 		}
 
-		return ctx.Status(code).JSON(response.ApiErrorResponse{
+		return ctx.Status(code).JSON(dto.ApiErrorResponse{
 			Message:    message,
 			StatusCode: code,
 		})

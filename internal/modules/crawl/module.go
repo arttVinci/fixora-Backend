@@ -9,6 +9,7 @@ import (
 	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/worker"
 	region_client "github.com/arttVinci/fixora-Backend/internal/modules/region-client"
 	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report-client"
+	verification_client "github.com/arttVinci/fixora-Backend/internal/modules/verification-client"
 	"github.com/arttVinci/fixora-Backend/internal/shared/client"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/generative-ai-go/genai"
@@ -18,9 +19,9 @@ import (
 )
 
 type Module struct {
-	client     *clientImpl
-	db         *gorm.DB
-	worker     *worker.CrawlerWorker
+	client *clientImpl
+	db     *gorm.DB
+	worker *worker.CrawlerWorker
 }
 
 func New(
@@ -31,22 +32,23 @@ func New(
 	genai *genai.Client,
 	reportClient report_client.Client,
 	regionClient region_client.Client,
+	verificationClient verification_client.Client,
 ) *Module {
 	crawledRepo := repository.NewCrawledRepository(log)
-	crawlerUseCase := usecase.NewCrawlerUseCase(db, log, validate, crawledRepo, reportClient, regionClient)
+	crawlerUseCase := usecase.NewCrawlerUseCase(db, log, validate, crawledRepo, reportClient, regionClient, verificationClient)
 
 	rssClient := infra.NewRssClient(log)
-	
+
 	llmClient := infra.NewLlmClient(log, genai)
-	
+
 	nominatimClient := client.NewNominatimClient(log)
 
 	crawlerWorker := worker.NewCrawlerWorker(log, rssClient, llmClient, nominatimClient, crawlerUseCase, reportClient, regionClient)
 
 	return &Module{
-		worker:     crawlerWorker,
-		client:     &clientImpl{},
-		db:         db,
+		worker: crawlerWorker,
+		client: &clientImpl{},
+		db:     db,
 	}
 }
 
@@ -57,5 +59,3 @@ func (m *Module) Client() crawl_client.Client {
 func (m *Module) Migrate() error {
 	return m.db.AutoMigrate(&entity.CrawledArticle{})
 }
-
-

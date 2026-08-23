@@ -1,7 +1,7 @@
 package crawl
 
 import (
-	"github.com/arttVinci/fixora-Backend/internal/shared/response"
+	"github.com/arttVinci/fixora-Backend/internal/shared/dto"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -14,10 +14,10 @@ func (m *Module) RegisterRoutes(router fiber.Router) {
 	crawlGroup := router.Group("/crawl")
 	crawlGroup.Post("/trigger", func(ctx *fiber.Ctx) error {
 		go m.worker.RunCrawler()
-		return ctx.JSON(response.WebResponse[any]{
+		return ctx.JSON(dto.WebResponse[any]{
 			Data:    nil,
 			Message: "Crawler berhasil di-trigger, berjalan di background",
 			Success: true,
 		})
 	})
-}
+}

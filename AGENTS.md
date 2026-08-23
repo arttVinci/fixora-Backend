@@ -350,15 +350,24 @@ Repository per-modul (mis. `ReportRepository`) meng-embed atau menggunakan gener
 
 ---
 
-## 9. Referensi
+## 9. Konvensi Git & Branch Workflow
+
+Aturan commit message, format Conventional Commits, prinsip 1 aktivitas = 1 commit, dan kewajiban push sebelum pindah branch **wajib** dibaca dan diikuti dari `docs/git-conventional.md` — dokumen itu adalah rujukan tunggal (single source of truth) untuk seluruh alur kerja Git di project ini, berlaku untuk siapa pun (manusia maupun AI agent) yang melakukan commit ke repository ini, apa pun modul yang sedang dikerjakan.
+
+Sebelum melakukan commit pertama kali di sebuah sesi kerja, pastikan sudah membaca `docs/git-conventional.md` secara penuh — jangan berasumsi soal format commit atau kapan boleh pindah branch tanpa merujuk ke dokumen tersebut.
+
+---
+
+## 10. Referensi
 
 - `docs/fixora-prd` — Product Requirement Document lengkap, rujukan utama untuk requirement bisnis sebelum implementasi. Wajib dibaca ulang sebelum mengerjakan modul baru.
+- `docs/git-conventional.md` — Rujukan tunggal untuk aturan commit message, format Conventional Commits, dan branch workflow. Wajib dibaca sebelum melakukan commit pertama di sebuah sesi kerja.
 - **Out of Scope MVP (jangan dikerjakan tanpa approval owner)**: multi-agent verification kompleks (>2 agent/debate-consensus), RAG cross-reference anggaran pemerintah, predictive risk scoring, satellite/aerial imagery analysis, agentic auto-generate surat pengaduan, social media listening, Google Maps review mining, IoT/sensor integration, traffic anomaly detection, notifikasi push/email, aplikasi mobile native, multi-bahasa, integrasi pembayaran/donasi. Daftar lengkap ada di PRD Bab 7.
 - **Success metrics MVP** (ringkas, lihat PRD Bab 6 untuk detail lengkap): jumlah entri masalah aktif di peta, unique visitor, jumlah laporan manual, jumlah konfirmasi "masih begini", akurasi klasifikasi CV, uptime news crawler.
 
 ---
 
-## 10. Contoh Peta Modul Domain (Non-Eksklusif)
+## 11. Contoh Peta Modul Domain (Non-Eksklusif)
 
 Contoh `Report`/`ReportUseCase`/`ReportController` di dokumen ini **murni ilustrasi pola layer & konvensi kode** (bab 4–5), bukan domain asli Fixora. Modul domain nyata di Fixora mengikuti kebutuhan fitur di PRD, misalnya (nama indikatif, bisa berubah sesuai desain final):
 
@@ -369,4 +378,4 @@ Contoh `Report`/`ReportUseCase`/`ReportController` di dokumen ini **murni ilustr
 - **Verification** — status verifikasi (pending/lolos/ditolak) terhadap Report baru, baik dari classifier maupun review manual.
 - **User** — akun pengguna pelapor (jika autentikasi sudah masuk scope MVP sesuai keputusan final).
 
-Setiap modul di atas **tetap wajib** mengikuti aturan arsitektur di Bab 2 (data isolation, komunikasi lewat `*-client`, migration independen) dan konvensi layer di Bab 4–5 — hanya nama entity/field yang berbeda, pola dan struktur kodenya tetap sama.
+Setiap modul di atas **tetap wajib** mengikuti aturan arsitektur di Bab 2 (data isolation, komunikasi lewat `*-client`, migration independen), konvensi layer di Bab 4–5, dan konvensi Git di Bab 9 — hanya nama entity/field yang berbeda, pola dan struktur kodenya tetap sama.

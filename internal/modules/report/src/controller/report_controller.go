@@ -3,7 +3,7 @@ package controller
 import (
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/model"
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/usecase"
-	"github.com/arttVinci/fixora-Backend/internal/shared/response"
+	"github.com/arttVinci/fixora-Backend/internal/shared/dto"
 	"github.com/gofiber/fiber/v2"
 	"github.com/sirupsen/logrus"
 )
@@ -50,7 +50,7 @@ func (c *ReportController) SearchMap(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	return ctx.JSON(response.WebResponse[[]model.ReportMapResponse]{
+	return ctx.JSON(dto.WebResponse[[]model.ReportMapResponse]{
 		Data:    resp,
 		Message: "Berhasil menampilkan data peta",
 		Success: true,
@@ -77,7 +77,7 @@ func (c *ReportController) GetDetail(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	return ctx.JSON(response.WebResponse[*model.ReportDetailResponse]{
+	return ctx.JSON(dto.WebResponse[*model.ReportDetailResponse]{
 		Data:    resp,
 		Message: "Berhasil menampilkan detail laporan",
 		Success: true,

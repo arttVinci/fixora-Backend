@@ -14,6 +14,7 @@ type Report struct {
 	Address         *string    `gorm:"column:address;type:varchar(500)"`
 	Severity        string     `gorm:"column:severity;type:varchar(10);not null"`
 	Status          string     `gorm:"column:status;type:varchar(25);not null;default:'pending_verification'"`
+	RejectReason    *string    `gorm:"column:reject_reason;type:text"`
 	SourceType      string     `gorm:"column:source_type;type:varchar(15);not null"`
 	MergedIntoID    *string    `gorm:"column:merged_into_id;type:varchar(36)"`
 	ConfidenceScore float64    `gorm:"column:confidence_score;type:float;not null;default:1.0"`
@@ -29,8 +30,8 @@ type Report struct {
 	Photos              []ReportPhoto        `gorm:"foreignKey:ReportID;references:ID"`
 	MergedReport        *Report              `gorm:"foreignKey:MergedIntoID;references:ID"`
 	ReportConfirmations []ReportConfirmation `gorm:"foreignKey:ReportID;references:ID"`
-	MergeLogsAsChild    []MergeLog           `gorm:"foreignKey:ReportID;references:ID"`
-	MergeLogsAsParent   []MergeLog           `gorm:"foreignKey:DuplicateOfReportID;references:ID"`
+	DuplicatesAsChild   []DuplicateReport    `gorm:"foreignKey:ReportID;references:ID"`
+	DuplicatesAsParent  []DuplicateReport    `gorm:"foreignKey:ParentID;references:ID"`
 }
 
 func (Report) TableName() string {
