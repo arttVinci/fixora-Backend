@@ -198,14 +198,19 @@ func (c *VerificationUseCase) RunVerification(ctx context.Context, sessionID str
 	}
 
 	// Phase 2: Run LLM agents (I/O heavy, no open transaction held)
+	articleContent := ""
+	if report.SourceType == "ai_news" {
+		articleContent = report.Description
+	}
 	req := &model.VerificationRequest{
-		ReportTitle:       report.Title,
-		ReportDescription: report.Description,
-		ReportSeverity:    report.Severity,
-		ReportCategory:    report.CategorySlug,
-		ReportSourceType:  report.SourceType,
-		ReportPhotoURL:    report.PrimaryPhotoURL,
-		ReportAddress:     report.Address,
+		ReportTitle:          report.Title,
+		ReportDescription:    report.Description,
+		ReportSeverity:       report.Severity,
+		ReportCategory:       report.CategorySlug,
+		ReportSourceType:     report.SourceType,
+		ReportPhotoURL:       report.PrimaryPhotoURL,
+		ReportAddress:        report.Address,
+		ReportArticleContent: articleContent,
 	}
 
 	advocateReq := &dto.LLMGenerateContentRequest{

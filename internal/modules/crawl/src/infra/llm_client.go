@@ -47,8 +47,8 @@ func isRateLimitError(err error) bool {
 	if err == nil {
 		return false
 	}
-    return strings.Contains(err.Error(), "429") || 
-           strings.Contains(err.Error(), "QuotaFailure")
+	return strings.Contains(err.Error(), "429") ||
+		strings.Contains(err.Error(), "QuotaFailure")
 }
 
 func (c *llmClientImpl) ExtractNewsInfo(ctx context.Context, title, content string) (*ExtractionResult, error) {
@@ -62,7 +62,7 @@ func (c *llmClientImpl) ExtractNewsInfo(ctx context.Context, title, content stri
 			},
 			"category": {
 				Type:        genai.TypeString,
-				Description: "Slug kategori masalah: jalan-rusak, sampah, drainase-tersumbat, jembatan-rusak, bangunan-terbengkalai",
+				Description: "Slug kategori masalah: jalan-rusak, sampah, jembatan-rusak, bangunan-terbengkalai",
 			},
 			"severity": {
 				Type:        genai.TypeString,
@@ -77,25 +77,37 @@ func (c *llmClientImpl) ExtractNewsInfo(ctx context.Context, title, content stri
 	}
 	model.ResponseMIMEType = "application/json"
 
-	prompt := fmt.Sprintf(`Tugas kamu adalah mengekstrak informasi masalah infrastruktur dari berita.
+	prompt := fmt.Sprintf(`Tugas kamu adalah mengklasifikasi sebuah artikel berita menjadi LAPORAN KERUSAKAN INFRASTRUKTUR PUBLIK, atau menolaknya.
 
 Judul Berita: %s
 Isi Berita: %s
 
-Panduan:
-1. is_relevant harus true hanya jika berita melaporkan kerusakan nyata saat ini.
-2. location harus alamat/area spesifik. Jika hanya provinsi/negara, is_relevant false.
-3. category wajib salah satu slug: jalan-rusak, sampah, drainase-tersumbat, jembatan-rusak, bangunan-terbengkalai.
-4. severity wajib salah satu: ringan, sedang, parah.
+Definisi ketat "laporan kerusakan infrastruktur publik" (is_relevant = true):
+- Berita mendeskripsikan KONDISI FISIK infrastruktur publik yang RUSAK, AMBRUK, TERBENGKALAI, atau TIDAK LAYAK PAKAI, yang sedang terjadi/dibiarkan.
+- Infrastruktur = jalan, jembatan, bangunan/fasilitas publik, atau tumpukan sampah di ruang publik.
 
-Balas JSON sesuai schema.`, title, content)
-    var lastErr error
+Wajib REJECT (is_relevant = false) untuk:
+- Kebijakan, regulasi, pernyataan/keputusan pejabat, rapat DPRD, alokasi anggaran.
+- Berita PERBAIKAN, pembangunan, pemulihan, atau "siap dilanjutkan/diperbaiki".
+- Banjir/terendam/genangan air/irigasi sawah tanpa menyebut kerusakan infrastruktur spesifik.
+- Kriminal, kecelakaan tanpa kerusakan infrastruktur, insiden sosial, konten horor, opini, analisis, wawancara.
+- Isu lingkungan umum (mikroplastik, polusi, tambang) yang bukan kerusakan infrastruktur fisik.
+
+Panduan output:
+1. is_relevant = true HANYA jika berita memenuhi definisi ketat di atas.
+2. location = alamat/area spesifik kerusakan (kelurahan/desa/jalan/kecamatan). Kosongkan jika terlalu general.
+3. category = salah satu slug: jalan-rusak, sampah, jembatan-rusak, bangunan-terbengkalai.
+4. severity = ringan, sedang, atau parah — nilai tingkat keparahan kondisi fisik, bukan dampak sosial.
+
+Jika ragu antara relevant dan tidak, pilih is_relevant = false. Balas JSON sesuai schema.`, title, content)
+
+	var lastErr error
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 
 		if err := Limitter(ctx); err != nil {
-            return nil, fmt.Errorf("rate limiter error: %w", err)
-        }
+			return nil, fmt.Errorf("rate limiter error: %w", err)
+		}
 
 		resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 		if err != nil {
@@ -140,7 +152,7 @@ Balas JSON sesuai schema.`, title, content)
 			c.Log.Warnf("Failed to unmarshal JSON from LLM: %+v (String: %s)", err, jsonStr)
 			return nil, err
 		}
-		
+
 		c.Log.Infof("LLM extraction successful for '%s': relevant=%v", title, result.IsRelevant)
 		return &result, nil
 	}
