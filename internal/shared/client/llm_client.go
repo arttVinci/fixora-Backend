@@ -18,7 +18,7 @@ import (
 type LLMClient struct {
 	apiKey string
 	baseUrl string
-	limitter *rate.Limiter
+	limiter *rate.Limiter
 	log *logrus.Logger
 }
 
@@ -26,7 +26,7 @@ func NewLLMClient(config dto.LLMProvider, log *logrus.Logger) *LLMClient {
 	return &LLMClient{
 		apiKey:   config.ApiKey,
 		baseUrl:  config.BaseUrl,
-		limitter: rate.NewLimiter(rate.Every(2*time.Second), 1),
+		limiter: rate.NewLimiter(rate.Every(2*time.Second), 1),
 		log:      log,
 	}
 }
@@ -41,7 +41,7 @@ func (l *LLMClient) GenerateContent(ctx context.Context, req *dto.LLMGenerateCon
 		return nil, fiber.NewError(fiber.StatusBadRequest, "Model tidak boleh kosong")
 	}
 
-	if err := l.limitter.Wait(ctx); err != nil {
+	if err := l.limiter.Wait(ctx); err != nil {
 		l.log.Warnf("Rate limiter wait failed : %+v", err)
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal memproses permintaan ke LLM")
 	}

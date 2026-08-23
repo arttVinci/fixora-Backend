@@ -14,7 +14,7 @@ func NewGoogleAiStudio(config *viper.Viper) *genai.Client {
 
 	client, err := genai.NewClient(ctx, option.WithAPIKey(config.GetString("google_ai_studio.api_key")))
 	if err != nil {
-		log.Printf("Failed to create Google AI Studio client: %s", config.GetString("google_ai_studio.api_key"))
+		log.Printf("Failed to create Google AI Studio client (check google_ai_studio.api_key config)")
 		log.Fatal(err)
 	}
 
