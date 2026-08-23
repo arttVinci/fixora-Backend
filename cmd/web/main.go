@@ -11,13 +11,13 @@ import (
 	module "github.com/arttVinci/fixora-Backend/internal/shared/modules"
 )
 
-// @title           AIC Backend API
+// @title           Fixora Backend API
 // @version         1.0
-// @description     API Documentation for AIC Backend.
+// @description     API Documentation for Fixora — Infrastructure Neglect Tracker.
 // @termsOfService  http://swagger.io/terms/
 // @contact.name    Technical Support
 // @contact.url     http://www.swagger.io/support
-// @contact.email   [EMAIL_ADDRESS]
+// @contact.email   support@fixora.id
 // @license.name    Apache 2.0
 // @license.url     http://www.apache.org/licenses/LICENSE-2.0.html
 
@@ -30,7 +30,7 @@ func main() {
 	viperConfig := config.NewViper()
 	log := config.NewLogger(viperConfig)
 	db := config.NewDatabase(viperConfig, log)
-	validate := config.NewValidator(viperConfig)
+	validate := config.NewValidator()
 	app := config.NewFiber(viperConfig)
 	genai := config.NewGoogleAiStudio(viperConfig)
 

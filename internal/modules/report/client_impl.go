@@ -78,9 +78,6 @@ func (c *clientImpl) GetCategoryBySlug(tx *gorm.DB, slug string) (*report_client
 
 func (c *clientImpl) CheckDuplicate(tx *gorm.DB, reportID string) error {
 	ctx := tx.Statement.Context
-	if ctx == nil {
-		ctx = tx.Statement.Context
-	}
 	return c.duplicateUseCase.CheckDuplicate(ctx, reportID)
 }
 
