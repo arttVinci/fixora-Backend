@@ -33,6 +33,7 @@ func (c *clientImpl) CreateReport(tx *gorm.DB, req *report_client.ReportClientRe
 		Severity:        req.Severity,
 		Status:          req.Status,
 		SourceType:      req.SourceType,
+		SourceURL:       req.SourceURL,
 		ConfidenceScore: req.ConfidenceScore,
 		FirstReportedAt: req.FirstReportedAt,
 	}
@@ -119,5 +120,9 @@ func (c *clientImpl) GetReportByID(tx *gorm.DB, reportID string) (*report_client
 	if photoURL == "" && len(report.Photos) > 0 {
 		photoURL = report.Photos[0].PhotoURL
 	}
-	return &report_client.ReportClientResponse{ID: report.ID, Title: report.Title, Description: description, Severity: report.Severity, CategorySlug: categorySlug, CategoryName: categoryName, SourceType: report.SourceType, PrimaryPhotoURL: photoURL, Address: address}, nil
+	sourceURLValue := ""
+	if report.SourceURL != nil {
+		sourceURLValue = *report.SourceURL
+	}
+	return &report_client.ReportClientResponse{ID: report.ID, Title: report.Title, Description: description, Severity: report.Severity, CategorySlug: categorySlug, CategoryName: categoryName, SourceType: report.SourceType, SourceURL: sourceURLValue, PrimaryPhotoURL: photoURL, Address: address}, nil
 }

@@ -14,6 +14,7 @@ type ReportClientRequest struct {
 	Severity        string
 	Status          string
 	SourceType      string
+	SourceURL       *string
 	ConfidenceScore float64
 	FirstReportedAt *time.Time
 	PrimaryPhotoURL string  // BARU: URL foto utama (sudah diupload client)

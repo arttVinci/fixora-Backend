@@ -63,6 +63,7 @@ func New(
 
 	return &Module{
 		Controller: reportController,
+		UseCase:    reportUseCase,
 		client:     clientImpl,
 		db:         db,
 		log:        log,
