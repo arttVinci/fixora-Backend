@@ -126,10 +126,10 @@ Mengambil data titik laporan infrastruktur untuk tampilan peta interaktif berdas
 
 | Parameter     | Tipe   | Wajib | Deskripsi                                                  |
 | ------------- | ------ | ----- | ---------------------------------------------------------- |
-| `min_lat`     | float  | Ya    | Latitude minimal (-90 s/d 90)                              |
-| `max_lat`     | float  | Ya    | Latitude maksimal (-90 s/d 90)                             |
-| `min_lng`     | float  | Ya    | Longitude minimal (-180 s/d 180)                           |
-| `max_lng`     | float  | Ya    | Longitude maksimal (-180 s/d 180)                          |
+| `min_lat`     | float  | Ya    | Latitude minimal                                           |
+| `max_lat`     | float  | Ya    | Latitude maksimal                                          |
+| `min_lng`     | float  | Ya    | Longitude minimal                                          |
+| `max_lng`     | float  | Ya    | Longitude maksimal                                         |
 | `category_id` | string | Tidak | Filter UUID Kategori                                       |
 | `status`      | string | Tidak | Filter Status (`pending_verification`, `in_progress`, dll) |
 | `severity`    | string | Tidak | Filter Severity (`ringan`, `sedang`, `parah`)              |
