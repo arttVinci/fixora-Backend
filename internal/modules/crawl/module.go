@@ -9,7 +9,6 @@ import (
 	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/worker"
 	region_client "github.com/arttVinci/fixora-Backend/internal/modules/region-client"
 	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report-client"
-	verification_client "github.com/arttVinci/fixora-Backend/internal/modules/verification-client"
 	"github.com/arttVinci/fixora-Backend/internal/shared/client"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/generative-ai-go/genai"
@@ -32,10 +31,9 @@ func New(
 	genai *genai.Client,
 	reportClient report_client.Client,
 	regionClient region_client.Client,
-	verificationClient verification_client.Client,
 ) *Module {
 	crawledRepo := repository.NewCrawledRepository(log)
-	crawlerUseCase := usecase.NewCrawlerUseCase(db, log, validate, crawledRepo, reportClient, regionClient, verificationClient)
+	crawlerUseCase := usecase.NewCrawlerUseCase(db, log, validate, crawledRepo, reportClient, regionClient)
 
 	rssClient := infra.NewRssClient(log)
 
