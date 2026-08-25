@@ -55,6 +55,7 @@ func isRateLimitError(err error) bool {
 func (c *llmClientImpl) ExtractNewsInfo(ctx context.Context, title, content string) (*ExtractionResult, error) {
 	model := c.Genai.GenerativeModel("gemini-3.5-flash-lite")
 	model.ResponseSchema = &genai.Schema{
+		Type: genai.TypeObject,
 		Properties: map[string]*genai.Schema{
 			"title": {
 				Type:        genai.TypeString,

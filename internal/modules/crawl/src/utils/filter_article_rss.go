@@ -9,11 +9,11 @@ import (
 )
 
 func ArticleRssFilter(article infra.RSSArticle) bool {
-	// Skip artikel lebih dari 3 hari.
+	// Skip artikel lebih dari 14 hari.
 	// Google News RSS mengirim tanggal format "Mon, 02 Jan 2006 15:04:05 GMT" —
 	// time.RFC1123 (bukan RFC1123Z) yang sanggup parse suffix "GMT".
 	if pubDate, err := parseRSSDate(article.PublishedAt); err == nil {
-		if pubDate.Before(time.Now().AddDate(0, 0, -3)) {
+		if pubDate.Before(time.Now().AddDate(0, 0, -14)) {
 			return true
 		}
 	}

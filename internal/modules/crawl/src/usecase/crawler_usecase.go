@@ -117,10 +117,6 @@ func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *model.Proce
 
 	if err := c.ReportClient.CheckDuplicate(c.DB.WithContext(ctx), reportRes.ID); err != nil {
 		c.Log.Warnf("Duplicate check failed for report %s : %+v", reportRes.ID, err)
-	} else if c.VerificationClient != nil {
-		if _, err := c.VerificationClient.CreateVerification(c.DB.WithContext(ctx), reportRes.ID); err != nil {
-			c.Log.Warnf("Verification created failed for report %s : %+v", reportRes.ID, err)
-		}
 	}
 
 	return nil
