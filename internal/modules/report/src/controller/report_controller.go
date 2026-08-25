@@ -9,14 +9,16 @@ import (
 )
 
 type ReportController struct {
-	Log     *logrus.Logger
-	UseCase *usecase.ReportUseCase
+	Log                 *logrus.Logger
+	UseCase             *usecase.ReportUseCase
+	AnalyzePhotoUseCase *usecase.AnalyzePhotoUseCase
 }
 
-func NewReportController(useCase *usecase.ReportUseCase, logger *logrus.Logger) *ReportController {
+func NewReportController(useCase *usecase.ReportUseCase, analyzePhotoUseCase *usecase.AnalyzePhotoUseCase, logger *logrus.Logger) *ReportController {
 	return &ReportController{
-		Log:     logger,
-		UseCase: useCase,
+		Log:                 logger,
+		UseCase:             useCase,
+		AnalyzePhotoUseCase: analyzePhotoUseCase,
 	}
 }
 
@@ -80,6 +82,68 @@ func (c *ReportController) GetDetail(ctx *fiber.Ctx) error {
 	return ctx.JSON(dto.WebResponse[*model.ReportDetailResponse]{
 		Data:    resp,
 		Message: "Berhasil menampilkan detail laporan",
+		Success: true,
+	})
+}
+
+// AnalyzePhoto godoc
+// @Summary      Analyze uploaded photo (CV classifier)
+// @Description  Upload an infrastructure problem photo to get AI-generated draft (title, description, category, severity).
+// @Tags         reports
+// @Accept       multipart/form-data
+// @Produce      json
+// @Param        photo formData file true "Problem photo"
+// @Success      200  {object}  response.WebResponse[*model.IssueAnalysisResultResponse]
+// @Failure      400  {object}  response.WebResponse[any]
+// @Failure      500  {object}  response.WebResponse[any]
+// @Router       /api/v1/reports/analyze-photo [post]
+func (c *ReportController) AnalyzePhoto(ctx *fiber.Ctx) error {
+	file, err := ctx.FormFile("photo")
+	if err != nil {
+		c.Log.Warnf("Failed to get photo from form : %+v", err)
+		return fiber.NewError(fiber.StatusBadRequest, "File foto tidak ditemukan pada form data")
+	}
+
+	resp, err := c.AnalyzePhotoUseCase.AnalyzeIssueImage(ctx.UserContext(), file)
+	if err != nil {
+		c.Log.Warnf("Failed to analyze photo : %+v", err)
+		return err
+	}
+
+	return ctx.JSON(dto.WebResponse[*model.IssueAnalysisResultResponse]{
+		Data:    resp,
+		Message: "Berhasil menganalisis foto",
+		Success: true,
+	})
+}
+
+// Create godoc
+// @Summary      Create report (user submission)
+// @Description  Submit a new infrastructure problem report with photo URL, location, and optional reporter email.
+// @Tags         reports
+// @Accept       json
+// @Produce      json
+// @Param        request body model.CreateReportRequest true "Create report payload"
+// @Success      201  {object}  response.WebResponse[*model.ReportDetailResponse]
+// @Failure      400  {object}  response.WebResponse[any]
+// @Failure      500  {object}  response.WebResponse[any]
+// @Router       /api/v1/reports [post]
+func (c *ReportController) Create(ctx *fiber.Ctx) error {
+	request := new(model.CreateReportRequest)
+	if err := ctx.BodyParser(request); err != nil {
+		c.Log.Warnf("Failed to parse request body : %+v", err)
+		return fiber.NewError(fiber.StatusBadRequest, "Format data request tidak valid")
+	}
+
+	resp, err := c.UseCase.CreateReport(ctx.UserContext(), request)
+	if err != nil {
+		c.Log.Warnf("Failed to create report : %+v", err)
+		return err
+	}
+
+	return ctx.Status(fiber.StatusCreated).JSON(dto.WebResponse[*model.ReportDetailResponse]{
+		Data:    resp,
+		Message: "Berhasil membuat laporan",
 		Success: true,
 	})
 }

@@ -5,6 +5,7 @@ import (
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/entity"
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/repository"
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/usecase"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -16,6 +17,10 @@ type clientImpl struct {
 }
 
 func (c *clientImpl) CreateReport(tx *gorm.DB, req *report_client.ReportClientRequest) (*report_client.ReportClientResponse, error) {
+	if req.ID == "" {
+		req.ID = uuid.NewString()
+	}
+
 	report := &entity.Report{
 		ID:              req.ID,
 		CategoryID:      req.CategoryID,
