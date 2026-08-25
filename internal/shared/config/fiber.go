@@ -3,6 +3,7 @@ package config
 import (
 	"github.com/arttVinci/fixora-Backend/internal/shared/dto"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/spf13/viper"
 	fiberSwagger "github.com/swaggo/fiber-swagger"
 )
@@ -14,6 +15,12 @@ func NewFiber(config *viper.Viper) *fiber.App {
 		Prefork:      config.GetBool("web.prefork"),
 		BodyLimit:    10 * 1024 * 1024,
 	})
+
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:     "*",
+		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+		AllowHeaders:     "Origin,Content-Type,Accept,Authorization",
+	}))
 
 	app.Static("/public", "./public")
 
