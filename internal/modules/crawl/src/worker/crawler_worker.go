@@ -180,6 +180,7 @@ func (w *CrawlerWorker) processArticles(ctx context.Context, articles map[string
 		req := &model.ProcessCrawledArticleRequest{
 			URL:          article.URL,
 			Title:        article.Title,
+			CleanTitle:   extraction.Title,
 			Content:      article.Content,
 			SourceName:   article.SourceName,
 			PublishedAt:  publishedAt,
