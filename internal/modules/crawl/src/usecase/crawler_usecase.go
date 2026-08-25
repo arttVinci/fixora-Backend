@@ -34,7 +34,6 @@ func NewCrawlerUseCase(
 	crawledRepo *repository.CrawledRepository,
 	reportClient report_client.Client,
 	regionClient region_client.Client,
-	verificationClient verification_client.Client,
 ) *CrawlerUseCase {
 	return &CrawlerUseCase{
 		DB:                       db,
@@ -43,7 +42,6 @@ func NewCrawlerUseCase(
 		CrawledArticleRepository: crawledRepo,
 		ReportClient:             reportClient,
 		RegionClient:             regionClient,
-		VerificationClient:       verificationClient,
 	}
 }
 
@@ -87,7 +85,7 @@ func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *model.Proce
 		Longitude:       req.Longitude,
 		Address:         &address,
 		Severity:        req.Severity,
-		Status:          "pending_verification",
+		Status:          "verified",
 		SourceType:      "ai_news",
 		ConfidenceScore: 0.8,
 		FirstReportedAt: &req.PublishedAt,
@@ -111,10 +109,6 @@ func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *model.Proce
 
 	if err := c.ReportClient.CheckDuplicate(c.DB.WithContext(ctx), reportRes.ID); err != nil {
 		c.Log.Warnf("Duplicate check failed for report %s : %+v", reportRes.ID, err)
-	} else if c.VerificationClient != nil {
-		if _, err := c.VerificationClient.CreateVerification(c.DB.WithContext(ctx), reportRes.ID); err != nil {
-			c.Log.Warnf("Verification created failed for report %s : %+v", reportRes.ID, err)
-		}
 	}
 
 	return nil
