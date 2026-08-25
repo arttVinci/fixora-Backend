@@ -16,9 +16,9 @@ type Report struct {
 	Status          string     `gorm:"column:status;type:varchar(25);not null;default:'pending_verification'"`
 	RejectReason    *string    `gorm:"column:reject_reason;type:text"`
 	SourceType      string     `gorm:"column:source_type;type:varchar(15);not null"`
+	SourceURL       *string    `gorm:"column:source_url;type:varchar(700)"`
 	MergedIntoID    *string    `gorm:"column:merged_into_id;type:varchar(36)"`
 	ConfidenceScore float64    `gorm:"column:confidence_score;type:float;not null;default:1.0"`
-	BudgetInfo      *string    `gorm:"column:budget_info;type:text"`
 	FirstReportedAt *time.Time `gorm:"column:first_reported_at;not null"`
 	LastConfirmedAt *time.Time `gorm:"column:last_confirmed_at"`
 	CreatedAt       *time.Time `gorm:"column:created_at;autoCreateTime"`

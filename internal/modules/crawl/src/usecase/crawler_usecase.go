@@ -65,7 +65,7 @@ func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *model.Proce
 		SourceName:  req.SourceName,
 		PublishedAt: &req.PublishedAt,
 		CrawledAt:   &req.CrawledAt,
-		Status:      "processed",
+		Status:      "success",
 	}
 
 	if err := c.CrawledArticleRepository.Create(tx, crawled); err != nil {
@@ -75,11 +75,16 @@ func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *model.Proce
 
 	address := req.Address
 	description := req.Content
+	sourceURL := req.URL
+	cleanTitle := req.CleanTitle
+	if cleanTitle == "" {
+		cleanTitle = req.Title
+	}
 	report := &report_client.ReportClientRequest{
 		ID:              infra.GenerateReportID(req.CategorySlug),
 		CategoryID:      req.CategoryID,
 		VillageID:       req.VillageID,
-		Title:           req.Title,
+		Title:           cleanTitle,
 		Description:     &description,
 		Latitude:        req.Latitude,
 		Longitude:       req.Longitude,
@@ -87,6 +92,7 @@ func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *model.Proce
 		Severity:        req.Severity,
 		Status:          "verified",
 		SourceType:      "ai_news",
+		SourceURL:       &sourceURL,
 		ConfidenceScore: 0.8,
 		FirstReportedAt: &req.PublishedAt,
 	}

@@ -8,6 +8,7 @@ type ReportClientResponse struct {
 	CategorySlug    string
 	CategoryName    string
 	SourceType      string
+	SourceURL       string
 	PrimaryPhotoURL string
 	Address         string
 }

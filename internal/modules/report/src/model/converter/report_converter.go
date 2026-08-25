@@ -70,6 +70,7 @@ func ReportToDetailResponse(report *entity.Report) *model.ReportDetailResponse {
 		Severity:           report.Severity,
 		Status:             report.Status,
 		Source:             report.SourceType,
+		SourceURL:          report.SourceURL,
 		CategoryName:       categoryName,
 		CategorySlug:       categorySlug,
 		PhotoURL:           &primaryPhoto,

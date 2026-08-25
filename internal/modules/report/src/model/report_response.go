@@ -24,6 +24,7 @@ type ReportDetailResponse struct {
 	Severity           string     `json:"severity"`
 	Status             string     `json:"status"`
 	Source         	   string     `json:"source"`
+	SourceURL          *string    `json:"source_url,omitempty"`
 	CategoryName       string     `json:"category_name"`
 	CategorySlug       string     `json:"category_slug"`
 	PhotoURL           *string     `json:"photo_url"`
