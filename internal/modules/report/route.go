@@ -9,4 +9,6 @@ func (m *Module) RegisterRoutes(router fiber.Router) {
 
 	group.Get("/map", m.Controller.SearchMap)
 	group.Get("/:id", m.Controller.GetDetail)
+	group.Post("/analyze-photo", m.Controller.AnalyzePhoto)
+	group.Post("/", m.Controller.Create)
 }

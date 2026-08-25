@@ -16,4 +16,6 @@ type ReportClientRequest struct {
 	SourceType      string
 	ConfidenceScore float64
 	FirstReportedAt *time.Time
+	PrimaryPhotoURL string  // BARU: URL foto utama (sudah diupload client)
+	ReporterEmail   *string // BARU: opsional
 }
