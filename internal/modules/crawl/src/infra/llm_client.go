@@ -13,6 +13,7 @@ import (
 )
 
 type ExtractionResult struct {
+	Title      string `json:"title"`
 	Location   string `json:"location"`
 	Category   string `json:"category"`
 	Severity   string `json:"severity"`
@@ -54,8 +55,11 @@ func isRateLimitError(err error) bool {
 func (c *llmClientImpl) ExtractNewsInfo(ctx context.Context, title, content string) (*ExtractionResult, error) {
 	model := c.Genai.GenerativeModel("gemini-3.5-flash-lite")
 	model.ResponseSchema = &genai.Schema{
-		Type: genai.TypeObject,
 		Properties: map[string]*genai.Schema{
+			"title": {
+				Type:        genai.TypeString,
+				Description: "Judul singkat laporan (maks 10 kata) yang hanya menggambarkan KONDISI FISIK kerusakan, contoh: 'Jalan Berlubang di Persimpangan Jalan'. Tanpa nama media, tanpa nama pejabat, tanpa 'Jawa Barat:'.",
+			},
 			"location": {
 				Type:        genai.TypeString,
 				Description: "Lokasi spesifik tempat masalah infrastruktur terjadi. Kosongkan jika terlalu ambigu atau general.",
@@ -73,7 +77,7 @@ func (c *llmClientImpl) ExtractNewsInfo(ctx context.Context, title, content stri
 				Description: "Apakah berita mendeskripsikan masalah infrastruktur spesifik saat ini.",
 			},
 		},
-		Required: []string{"location", "category", "severity", "is_relevant"},
+		Required: []string{"title", "location", "category", "severity", "is_relevant"},
 	}
 	model.ResponseMIMEType = "application/json"
 
@@ -87,17 +91,18 @@ Definisi ketat "laporan kerusakan infrastruktur publik" (is_relevant = true):
 - Infrastruktur = jalan, jembatan, bangunan/fasilitas publik, atau tumpukan sampah di ruang publik.
 
 Wajib REJECT (is_relevant = false) untuk:
-- Kebijakan, regulasi, pernyataan/keputusan pejabat, rapat DPRD, alokasi anggaran.
+- Kebijakan, regulasi, pernyataan/keputusan/ajakan/imbauan pejabat, rapat DPRD, alokasi anggaran, kritik/keluhan warga yang TIDAK mendeskripsikan kerusakan fisik spesifik.
 - Berita PERBAIKAN, pembangunan, pemulihan, atau "siap dilanjutkan/diperbaiki".
 - Banjir/terendam/genangan air/irigasi sawah tanpa menyebut kerusakan infrastruktur spesifik.
 - Kriminal, kecelakaan tanpa kerusakan infrastruktur, insiden sosial, konten horor, opini, analisis, wawancara.
 - Isu lingkungan umum (mikroplastik, polusi, tambang) yang bukan kerusakan infrastruktur fisik.
 
 Panduan output:
-1. is_relevant = true HANYA jika berita memenuhi definisi ketat di atas.
-2. location = alamat/area spesifik kerusakan (kelurahan/desa/jalan/kecamatan). Kosongkan jika terlalu general.
-3. category = salah satu slug: jalan-rusak, sampah, jembatan-rusak, bangunan-terbengkalai.
-4. severity = ringan, sedang, atau parah — nilai tingkat keparahan kondisi fisik, bukan dampak sosial.
+1. is_relevant = true HANYA jika berita mendeskripsikan kerusakan fisik spesifik yang sedang terjadi/dibiarkan — bukan sekadar berita yang MEMBAHAS topik infrastruktur.
+2. title = judul singkat (maks 10 kata) berisi KONDISI FISIK + LOKASI singkat. Contoh benar: "Jalan Berlubang di Persimpangan Jalan", "Jembatan Amblas di Cianjur", "Sampah Menumpuk di Pasar". Contoh salah: "Jawa Barat: Een Rusmiyati Meminta Dinas Terkait Segera Memperbaiki Jalan Rusak di Argasunya - jejakkasus.co.id". Jangan cantumkan nama media, nama pejabat, prefix provinsi, atau tanda hubung sumber.
+3. location = alamat/area spesifik kerusakan (kelurahan/desa/jalan/kecamatan). Kosongkan jika terlalu general.
+4. category = salah satu slug: jalan-rusak, sampah, jembatan-rusak, bangunan-terbengkalai.
+5. severity = ringan, sedang, atau parah — nilai tingkat keparahan kondisi fisik, bukan dampak sosial.
 
 Jika ragu antara relevant dan tidak, pilih is_relevant = false. Balas JSON sesuai schema.`, title, content)
 

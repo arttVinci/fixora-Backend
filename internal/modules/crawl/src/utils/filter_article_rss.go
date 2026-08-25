@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -8,8 +9,10 @@ import (
 )
 
 func ArticleRssFilter(article infra.RSSArticle) bool {
-	// Skip artikel lebih dari 3 hari
-	if pubDate, err := time.Parse(time.RFC1123Z, article.PublishedAt); err == nil {
+	// Skip artikel lebih dari 3 hari.
+	// Google News RSS mengirim tanggal format "Mon, 02 Jan 2006 15:04:05 GMT" —
+	// time.RFC1123 (bukan RFC1123Z) yang sanggup parse suffix "GMT".
+	if pubDate, err := parseRSSDate(article.PublishedAt); err == nil {
 		if pubDate.Before(time.Now().AddDate(0, 0, -3)) {
 			return true
 		}
@@ -43,4 +46,22 @@ func ArticleRssFilter(article infra.RSSArticle) bool {
 		}
 	}
 	return false
+}
+
+// parseRSSDate mencoba berbagai layout tanggal RSS.
+// Layout pertama yang cocok menang; error dikembalikan bila semua gagal
+// sehingga caller (ArticleRssFilter) bisa memutuskan fallback-nya.
+func parseRSSDate(value string) (time.Time, error) {
+	layouts := []string{
+		time.RFC1123, // "Mon, 02 Jan 2006 15:04:05 GMT" — format Google News
+		time.RFC1123Z,
+		time.RFC3339,
+		"Mon, 2 Jan 2006 15:04:05 MST",
+	}
+	for _, layout := range layouts {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unrecognized date format: %q", value)
 }
