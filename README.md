@@ -114,7 +114,9 @@ Bila dijalankan secara lokal dengan konfigurasi default, Base URL API adalah:
 
 ### Daftar Endpoint
 
-#### 1. Search Map Reports
+#### Reports
+
+##### 1. Search Map Reports
 
 Mengambil data titik laporan infrastruktur untuk tampilan peta interaktif berdasarkan _bounding box_ koordinat.
 
@@ -146,14 +148,14 @@ GET http://127.0.0.1:8080/api/reports/map?min_lat=-7.8&max_lat=-6.2&min_lng=106.
   "data": [
     {
       "id": "RPT-jalan-rusak-20260808-ba00",
-      "title": "Pemkot Bekasi Alokasikan Rp200 Miliar untuk Perbaikan Jalan Rusak - MetroTVNews.com",
+      "title": "Jalan Rusak parah di Kota Bekasi",
       "latitude": -6.2349858,
       "longitude": 106.9945444,
       "severity": "sedang",
       "category_slug": "jalan-rusak",
       "status": "pending_verification",
-      "primary_photo_url": "",
-      "source_type": "ai_news"
+      "photo_url": "",
+      "source": "ai_news"
     }
   ],
   "message": "Berhasil menampilkan data peta",

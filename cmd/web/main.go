@@ -38,7 +38,7 @@ func main() {
 	regionModule := region.New(db, log)
 	reportModule := report.New(db, log, validate, viperConfig, genai, regionModule.Client())
 	verificationModule := verification.New(db, log, validate, viperConfig, genai, reportModule.Client())
-	crawlModule := crawl.New(db, log, validate, viperConfig, genai, reportModule.Client(), regionModule.Client(), verificationModule.Client())
+	crawlModule := crawl.New(db, log, validate, viperConfig, genai, reportModule.Client(), regionModule.Client())
 	reportModule.SetVerificationClient(verificationModule.Client())
 
 	// Register all modules

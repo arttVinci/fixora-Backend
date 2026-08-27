@@ -34,7 +34,6 @@ func NewCrawlerUseCase(
 	crawledRepo *repository.CrawledRepository,
 	reportClient report_client.Client,
 	regionClient region_client.Client,
-	verificationClient verification_client.Client,
 ) *CrawlerUseCase {
 	return &CrawlerUseCase{
 		DB:                       db,
@@ -43,7 +42,6 @@ func NewCrawlerUseCase(
 		CrawledArticleRepository: crawledRepo,
 		ReportClient:             reportClient,
 		RegionClient:             regionClient,
-		VerificationClient:       verificationClient,
 	}
 }
 
@@ -92,7 +90,7 @@ func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *model.Proce
 		Longitude:       req.Longitude,
 		Address:         &address,
 		Severity:        req.Severity,
-		Status:          "pending_verification",
+		Status:          "verified",
 		SourceType:      "ai_news",
 		SourceURL:       &sourceURL,
 		ConfidenceScore: 0.8,
