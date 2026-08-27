@@ -302,9 +302,52 @@ Submit laporan baru masalah infrastruktur beserta foto, lokasi, dan detail lainn
 
 ---
 
+#### Categories
+
+##### 5. Get List Categories
+
+Mengambil daftar seluruh kategori masalah infrastruktur yang tersedia di platform.
+
+- **Method:** `GET`
+- **Path:** `/api/categories/`
+
+**Contoh URL Request:**
+
+```http
+GET http://127.0.0.1:8080/api/categories/
+```
+
+**Contoh Response Payload:**
+
+```json
+{
+  "data": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Bangunan Terbengkalai",
+      "slug": "bangunan-terbengkalai"
+    },
+    {
+      "id": "660f9500-f3ac-52e5-b827-557766550111",
+      "name": "Drainase Tersumbat",
+      "slug": "drainase-tersumbat"
+    },
+    {
+      "id": "770a0600-a4bd-63f6-c938-668877660222",
+      "name": "Jalan Rusak",
+      "slug": "jalan-rusak"
+    }
+  ],
+  "message": "Berhasil menampilkan daftar kategori",
+  "success": true
+}
+```
+
+---
+
 #### Crawl
 
-##### 5. Trigger AI News Crawler (Manual)
+##### 6. Trigger AI News Crawler (Manual)
 
 Memicu proses AI News Crawler secara manual untuk mencari berita kerusakan infrastruktur di background.
 
