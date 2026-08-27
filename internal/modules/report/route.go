@@ -11,4 +11,7 @@ func (m *Module) RegisterRoutes(router fiber.Router) {
 	group.Get("/:id", m.Controller.GetDetail)
 	group.Post("/analyze-photo", m.Controller.AnalyzePhoto)
 	group.Post("/", m.Controller.Create)
+
+	categoryGroup := router.Group("/categories")
+	categoryGroup.Get("/", m.CategoryController.List)
 }

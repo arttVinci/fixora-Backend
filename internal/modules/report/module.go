@@ -18,11 +18,12 @@ import (
 )
 
 type Module struct {
-	Controller *controller.ReportController
-	UseCase    *usecase.ReportUseCase
-	client     *clientImpl
-	db         *gorm.DB
-	log        *logrus.Logger
+	Controller         *controller.ReportController
+	CategoryController *controller.CategoryController
+	UseCase            *usecase.ReportUseCase
+	client             *clientImpl
+	db                 *gorm.DB
+	log                *logrus.Logger
 }
 
 func New(
@@ -60,13 +61,16 @@ func New(
 	)
 
 	reportController := controller.NewReportController(reportUseCase, analyzePhotoUseCase, log)
+	categoryUseCase := usecase.NewCategoryUseCase(db, log, categoryRepo)
+	categoryController := controller.NewCategoryController(categoryUseCase, log)
 
 	return &Module{
-		Controller: reportController,
-		UseCase:    reportUseCase,
-		client:     clientImpl,
-		db:         db,
-		log:        log,
+		Controller:         reportController,
+		CategoryController: categoryController,
+		UseCase:            reportUseCase,
+		client:             clientImpl,
+		db:                 db,
+		log:                log,
 	}
 }
 
