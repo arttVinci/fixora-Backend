@@ -23,13 +23,13 @@ type SearchReportListRequest struct {
 }
 
 type CreateReportRequest struct {
-	CategoryID      string  `json:"category_id" validate:"required,uuid"`
-	Title           string  `json:"title" validate:"required,max=200"`
-	Description     string  `json:"description" validate:"omitempty"`
-	Latitude        float64 `json:"latitude" validate:"required,min=-90,max=90"`
-	Longitude       float64 `json:"longitude" validate:"required,min=-180,max=180"`
-	Address         string  `json:"address" validate:"omitempty,max=500"`
-	Severity        string  `json:"severity" validate:"required,oneof=ringan sedang parah"`
-	PrimaryPhotoURL string  `json:"primary_photo_url" validate:"required,url,max=500"`
-	ReporterEmail   string  `json:"reporter_email" validate:"omitempty,email,max=150"`
+	CategoryID       string  `json:"category_id" validate:"required,uuid"`
+	Title            string  `json:"title" validate:"required,max=200"`
+	Description      string  `json:"description" validate:"omitempty"`
+	Latitude         float64 `json:"latitude" validate:"required,min=-90,max=90"`
+	Longitude        float64 `json:"longitude" validate:"required,min=-180,max=180"`
+	Address          string  `json:"address" validate:"omitempty,max=500"`
+	Severity         string  `json:"severity" validate:"required,oneof=ringan sedang parah"`
+	StagingSessionID string  `json:"staging_session_id" validate:"required,uuid"`
+	ReporterEmail    string  `json:"reporter_email" validate:"omitempty,email,max=150"`
 }

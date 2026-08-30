@@ -30,6 +30,7 @@ type ReportUseCase struct {
 	ReportClient       report_client.Client
 	RegionClient       region_client.Client
 	NominatimClient    client.NominatimClient
+	Cloudinary         *client.CloudinaryClient
 	VerificationClient verification_client.Client
 }
 
@@ -43,6 +44,7 @@ func NewReportUseCase(
 	reportClient report_client.Client,
 	regionClient region_client.Client,
 	nominatimClient client.NominatimClient,
+	cloudinary *client.CloudinaryClient,
 ) *ReportUseCase {
 	return &ReportUseCase{
 		DB:                 db,
@@ -54,6 +56,7 @@ func NewReportUseCase(
 		ReportClient:       reportClient,
 		RegionClient:       regionClient,
 		NominatimClient:    nominatimClient,
+		Cloudinary:         cloudinary,
 	}
 }
 
@@ -117,6 +120,21 @@ func (c *ReportUseCase) CreateReport(ctx context.Context, request *model.CreateR
 
 	reportID := uuid.NewString()
 
+	if c.Cloudinary == nil {
+		c.Log.Warnf("Cloudinary is not configured")
+		return nil, fiber.NewError(fiber.StatusServiceUnavailable, "Penyimpanan foto belum dikonfigurasi")
+	}
+
+	promoted, err := c.Cloudinary.Promote(
+		ctx,
+		client.StagingPublicID(request.StagingSessionID, client.PrimarySlot),
+		client.ReportsPublicID(reportID, client.PrimarySlot),
+	)
+	if err != nil {
+		c.Log.Warnf("Failed to promote staged photo : %+v", err)
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal memproses foto laporan")
+	}
+
 	var reporterIDPtr *string
 	if request.ReporterEmail != "" {
 		reporter := new(entity.Reporter)
@@ -165,17 +183,15 @@ func (c *ReportUseCase) CreateReport(ctx context.Context, request *model.CreateR
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal membuat laporan")
 	}
 
-	if request.PrimaryPhotoURL != "" {
-		photo := &entity.ReportPhoto{
-			ID:        uuid.NewString(),
-			ReportID:  reportID,
-			PhotoURL:  request.PrimaryPhotoURL,
-			IsPrimary: true,
-		}
-		if err := c.ReportPhotoRepo.Create(tx, photo); err != nil {
-			c.Log.Warnf("Failed to create report photo : %+v", err)
-			return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal menyimpan foto laporan")
-		}
+	photo := &entity.ReportPhoto{
+		ID:        uuid.NewString(),
+		ReportID:  reportID,
+		PhotoURL:  promoted.SecureURL,
+		IsPrimary: true,
+	}
+	if err := c.ReportPhotoRepo.Create(tx, photo); err != nil {
+		c.Log.Warnf("Failed to create report photo : %+v", err)
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal menyimpan foto laporan")
 	}
 
 	if err := tx.Commit().Error; err != nil {

@@ -10,18 +10,21 @@ import (
 	"strings"
 
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/model"
+	"github.com/arttVinci/fixora-Backend/internal/shared/client"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/generative-ai-go/genai"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
 type AnalyzePhotoUseCase struct {
-	DB       *gorm.DB
-	Log      *logrus.Logger
-	Validate *validator.Validate
-	Genai    *genai.Client
+	DB         *gorm.DB
+	Log        *logrus.Logger
+	Validate   *validator.Validate
+	Genai      *genai.Client
+	Cloudinary *client.CloudinaryClient
 }
 
 func NewAnalyzePhotoUseCase(
@@ -29,16 +32,31 @@ func NewAnalyzePhotoUseCase(
 	log *logrus.Logger,
 	validate *validator.Validate,
 	genai *genai.Client,
+	cloudinary *client.CloudinaryClient,
 ) *AnalyzePhotoUseCase {
 	return &AnalyzePhotoUseCase{
-		DB:       db,
-		Log:      log,
-		Validate: validate,
-		Genai:    genai,
+		DB:         db,
+		Log:        log,
+		Validate:   validate,
+		Genai:      genai,
+		Cloudinary: cloudinary,
 	}
 }
 
 func (i *AnalyzePhotoUseCase) AnalyzeIssueImage(ctx context.Context, image *multipart.FileHeader) (*model.IssueAnalysisResultResponse, error) {
+	sessionID := uuid.NewString()
+
+	if i.Cloudinary == nil {
+		i.Log.Warnf("Cloudinary is not configured, photo will not be staged")
+		return nil, fiber.NewError(fiber.StatusServiceUnavailable, "Penyimpanan foto belum dikonfigurasi")
+	}
+
+	staged, err := i.Cloudinary.UploadStaged(ctx, image, client.StagingPublicID(sessionID, client.PrimarySlot))
+	if err != nil {
+		i.Log.Warnf("Failed to stage photo : %+v", err)
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal mengunggah foto")
+	}
+
 	file, err := image.Open()
 	if err != nil {
 		i.Log.Warnf("Failed to open image file : %+v", err)
@@ -59,6 +77,9 @@ func (i *AnalyzePhotoUseCase) AnalyzeIssueImage(ctx context.Context, image *mult
 		i.Log.Warnf("Failed to analyze issue image : %+v", err)
 		return nil, err
 	}
+
+	response.SessionID = sessionID
+	response.PhotoURL = staged.SecureURL
 
 	return response, nil
 }
