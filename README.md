@@ -154,7 +154,7 @@ GET http://127.0.0.1:8080/api/reports/map?min_lat=-7.8&max_lat=-6.2&min_lng=106.
       "severity": "sedang",
       "category_slug": "jalan-rusak",
       "status": "pending_verification",
-      "photo_url": "",
+      "photo_url": "https://res.cloudinary.com/fixora/image/upload/v1/reports/c9a7e2f1/primary.jpg",
       "source": "ai_news"
     }
   ],
@@ -171,9 +171,32 @@ Mengambil detail lengkap satu laporan infrastruktur berdasarkan ID.
 - **Path:** `/api/reports/:id`
 - **Path Parameters:**
 
-| Parameter | Tipe   | Wajib | Deskripsi |
-| --------- | ------ | ----- | --------- |
-| `id`      | string | Ya    | Report ID |
+| Parameter | Tipe   | Wajib | Deskripsi        |
+| --------- | ------ | ----- | ---------------- |
+| `id`      | string | Ya    | Report ID (UUID) |
+
+**Struktur Response Data (`ReportDetailResponse`):**
+
+| Field | Tipe | Deskripsi |
+| ----- | ---- | --------- |
+| `id` | string | UUID unik laporan |
+| `title` | string | Judul laporan kerusakan infrastruktur |
+| `description` | string (opsional) | Deskripsi rinci kondisi masalah |
+| `latitude` | float | Titik koordinat garis lintang (-90 s/d 90) |
+| `longitude` | float | Titik koordinat garis bujur (-180 s/d 180) |
+| `address` | string (opsional) | Alamat lokasi masalah |
+| `severity` | string | Tingkat keparahan (`ringan`, `sedang`, `parah`) |
+| `status` | string | Status verifikasi (`pending_verification`, `verified`, `rejected`) |
+| `source` | string | Asal sumber data (`user_report`, `ai_news`, `gov_data`) |
+| `source_url` | string (opsional) | Tautan URL sumber berita asli (hadir jika `source` = `ai_news`) |
+| `category_name` | string | Nama kategori masalah (mis. `Jalan Rusak`, `Sampah`) |
+| `category_slug` | string | Slug kategori masalah (mis. `jalan-rusak`, `sampah`) |
+| `photo_url` | string (opsional) | URL foto utama masalah infrastruktur |
+| `additional_photos` | array of string (opsional) | Daftar URL foto tambahan pendukung |
+| `total_confirmations` | integer | Total konfirmasi "masih begini" dari pengguna |
+| `merged_into_id` | string (opsional) | UUID laporan induk jika laporan ini ditandai duplikat dan di-merge |
+| `first_reported_at` | string (ISO 8601) | Waktu pertama kali laporan dibuat atau berita dideteksi |
+| `last_confirmed_at` | string (ISO 8601, opsional) | Waktu konfirmasi kondisi terakhir dari pengguna |
 
 **Contoh URL Request:**
 
@@ -181,7 +204,7 @@ Mengambil detail lengkap satu laporan infrastruktur berdasarkan ID.
 GET http://127.0.0.1:8080/api/reports/c9a7e2f1-4b6d-4e8a-9f3c-1a2b3c4d5e6f
 ```
 
-**Contoh Response Payload:**
+**Contoh Response Payload (Laporan Warga — `source: user_report`):**
 
 ```json
 {
@@ -200,7 +223,36 @@ GET http://127.0.0.1:8080/api/reports/c9a7e2f1-4b6d-4e8a-9f3c-1a2b3c4d5e6f
     "photo_url": "https://res.cloudinary.com/fixora/image/upload/v1/reports/c9a7e2f1/primary.jpg",
     "additional_photos": [],
     "total_confirmations": 3,
-    "first_reported_at": "2026-08-08T10:00:00Z"
+    "first_reported_at": "2026-08-08T10:00:00Z",
+    "last_confirmed_at": "2026-08-15T14:30:00Z"
+  },
+  "message": "Berhasil menampilkan detail laporan",
+  "success": true
+}
+```
+
+**Contoh Response Payload (Deteksi Berita AI — `source: ai_news` dengan `source_url`):**
+
+```json
+{
+  "data": {
+    "id": "e7b1a2f3-5c8d-4e9a-9f1c-2a3b4c5d6e7f",
+    "title": "Jembatan Rusak dan Amblas di Jalur Penghubung",
+    "description": "Sebagian badan jembatan amblas akibat tergerus aliran sungai deras.",
+    "latitude": -6.2412345,
+    "longitude": 106.9987654,
+    "address": "Jl. Raya Narogong, Rawalumbu, Kota Bekasi",
+    "severity": "parah",
+    "status": "verified",
+    "source": "ai_news",
+    "source_url": "https://megapolitan.kompas.com/read/2026/08/20/jembatan-amblas-bekasi",
+    "category_name": "Jembatan Rusak",
+    "category_slug": "jembatan-rusak",
+    "photo_url": "https://res.cloudinary.com/fixora/image/upload/v1/reports/e7b1a2f3/primary.jpg",
+    "additional_photos": [],
+    "total_confirmations": 5,
+    "first_reported_at": "2026-08-20T08:00:00Z",
+    "last_confirmed_at": "2026-08-22T09:15:00Z"
   },
   "message": "Berhasil menampilkan detail laporan",
   "success": true
