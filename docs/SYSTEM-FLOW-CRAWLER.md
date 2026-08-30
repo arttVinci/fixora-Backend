@@ -104,7 +104,7 @@ Untuk setiap artikel unik dari RSS:
 | `latitude` / `longitude` | Hasil geocoding Nominatim |
 | `address` | Display name dari Nominatim |
 | `severity` | Hasil ekstraksi LLM (`ringan`/`sedang`/`parah`) |
-| `status` | `pending_verification` |
+| `status` | `verified` |
 | `source_type` | `ai_news` |
 | `reporter_id` | `NULL` (tidak ada pelapor manusia) |
 | `first_reported_at` | Tanggal publikasi berita (bukan waktu crawl) |

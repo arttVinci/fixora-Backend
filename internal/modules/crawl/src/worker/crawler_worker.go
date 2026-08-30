@@ -80,29 +80,35 @@ func (w *CrawlerWorker) RunCrawler() error {
 		return err
 	}
 
-	const activeRegion = "Jawa Barat" 
-	
+	// Scope wilayah: Jabodetabek (Jakarta, Bogor, Depok, Tangerang, Bekasi).
+	// Query per kota, bukan kata "Jabodetabek", karena berita Indonesia jarang
+	// memakai istilah tersebut di judul sehingga query per kota lebih relevan.
+	regions := []string{"Jakarta", "Bogor", "Depok", "Tangerang", "Bekasi"}
+
 	allArticles := make(map[string]infra.RSSArticle)
 	for _, category := range categories {
 		var keywords []string
 		json.Unmarshal(category.SearchKeywords, &keywords)
 
-		for _, keyword := range keywords { 
-			articles, err := w.RssClient.FetchArticles(ctx, keyword+" "+activeRegion)
-			if err != nil {
-				w.Log.Warnf("Failed to fetch RSS for '%s': %+v", keyword+" "+activeRegion, err)
-				continue
-			}
-
-			for _, article := range articles {
-				if utils.ArticleRssFilter(article) {
+		for _, keyword := range keywords {
+			for _, region := range regions {
+				query := keyword + " " + region
+				articles, err := w.RssClient.FetchArticles(ctx, query)
+				if err != nil {
+					w.Log.Warnf("Failed to fetch RSS for '%s': %+v", query, err)
 					continue
 				}
-				if _, exists := allArticles[article.URL]; !exists {
-					allArticles[article.URL] = article
+
+				for _, article := range articles {
+					if utils.ArticleRssFilter(article) {
+						continue
+					}
+					if _, exists := allArticles[article.URL]; !exists {
+						allArticles[article.URL] = article
+					}
 				}
 			}
-		 }
+		}
 	}
 
 	w.processArticles(ctx, allArticles)

@@ -155,9 +155,9 @@ func (c *VerificationUseCase) RunVerification(ctx context.Context, sessionID str
 	}
 
 	now := time.Now()
-	if report.SourceType == "gov_data" {
+	if report.SourceType == "gov_data" || report.SourceType == "ai_news" {
 		verdict := true
-		reason := "gov_data"
+		reason := report.SourceType
 
 		VerificationSessionEntity.Status = "approved"
 		VerificationSessionEntity.FinalVerdict = &verdict
