@@ -131,7 +131,7 @@ Mengambil data titik laporan infrastruktur untuk tampilan peta interaktif berdas
 | `min_lng`     | float  | Ya    | Longitude minimal                                          |
 | `max_lng`     | float  | Ya    | Longitude maksimal                                         |
 | `category_id` | string | Tidak | Filter UUID Kategori                                       |
-| `status`      | string | Tidak | Filter Status (`pending_verification`, `in_progress`, dll) |
+| `status`      | string | Tidak | Filter Status (`pending_verification`, `verified`, `rejected`) |
 | `severity`    | string | Tidak | Filter Severity (`ringan`, `sedang`, `parah`)              |
 | `source_type` | string | Tidak | Filter Sumber (`user_report`, `ai_news`, `gov_data`)       |
 
@@ -147,7 +147,7 @@ GET http://127.0.0.1:8080/api/reports/map?min_lat=-7.8&max_lat=-6.2&min_lng=106.
 {
   "data": [
     {
-      "id": "RPT-jalan-rusak-20260808-ba00",
+      "id": "c9a7e2f1-4b6d-4e8a-9f3c-1a2b3c4d5e6f",
       "title": "Jalan Rusak parah di Kota Bekasi",
       "latitude": -6.2349858,
       "longitude": 106.9945444,
@@ -178,7 +178,7 @@ Mengambil detail lengkap satu laporan infrastruktur berdasarkan ID.
 **Contoh URL Request:**
 
 ```http
-GET http://127.0.0.1:8080/api/reports/RPT-jalan-rusak-20260808-ba00
+GET http://127.0.0.1:8080/api/reports/c9a7e2f1-4b6d-4e8a-9f3c-1a2b3c4d5e6f
 ```
 
 **Contoh Response Payload:**
@@ -186,7 +186,7 @@ GET http://127.0.0.1:8080/api/reports/RPT-jalan-rusak-20260808-ba00
 ```json
 {
   "data": {
-    "id": "RPT-jalan-rusak-20260808-ba00",
+    "id": "c9a7e2f1-4b6d-4e8a-9f3c-1a2b3c4d5e6f",
     "title": "Jalan Berlubang di Jl. Ahmad Yani Bekasi",
     "description": "Lubang berdiameter 1 meter di jalur utama.",
     "latitude": -6.2349858,
@@ -195,15 +195,12 @@ GET http://127.0.0.1:8080/api/reports/RPT-jalan-rusak-20260808-ba00
     "severity": "sedang",
     "status": "pending_verification",
     "source": "user_report",
-    "source_url": null,
     "category_name": "Jalan Rusak",
     "category_slug": "jalan-rusak",
-    "photo_url": "https://example.com/photo.jpg",
-    "additional_photos": null,
+    "photo_url": "https://res.cloudinary.com/fixora/image/upload/v1/reports/c9a7e2f1/primary.jpg",
+    "additional_photos": [],
     "total_confirmations": 3,
-    "merged_into_id": null,
-    "first_reported_at": "2026-08-08T10:00:00Z",
-    "last_confirmed_at": "2026-08-20T14:30:00Z"
+    "first_reported_at": "2026-08-08T10:00:00Z"
   },
   "message": "Berhasil menampilkan detail laporan",
   "success": true
@@ -228,6 +225,8 @@ Upload foto masalah infrastruktur untuk mendapatkan draft otomatis (judul, deskr
 ```json
 {
   "data": {
+    "session_id": "e4b6a2c8-9d1f-4c3e-8a7b-2f1d5c6e9a4b",
+    "photo_url": "https://res.cloudinary.com/fixora/image/upload/v1/staging/e4b6a2c8/primary.jpg",
     "title": "Jalan Berlubang Besar di Area Perumahan",
     "description": "Terlihat lubang jalan berdiameter sekitar 1 meter dengan kedalaman cukup signifikan di area jalan perumahan.",
     "category": "jalan-rusak",
@@ -239,8 +238,6 @@ Upload foto masalah infrastruktur untuk mendapatkan draft otomatis (judul, deskr
 ```
 
 ##### 4. Create Report (Laporan Warga)
-
-Submit laporan baru masalah infrastruktur beserta foto, lokasi, dan detail lainnya.
 
 - **Method:** `POST`
 - **Path:** `/api/reports/`
@@ -256,7 +253,7 @@ Submit laporan baru masalah infrastruktur beserta foto, lokasi, dan detail lainn
 | `longitude`         | float  | Ya    | Longitude lokasi (-180 s/d 180)                 |
 | `address`           | string | Tidak | Alamat lokasi (maks. 500 karakter)              |
 | `severity`          | string | Ya    | Tingkat keparahan (`ringan`, `sedang`, `parah`) |
-| `primary_photo_url` | string | Ya    | URL foto utama (harus berformat URL valid)      |
+| `staging_session_id` | string | Ya    | Session ID foto staging (dari endpoint `analyze-photo`) |
 | `reporter_email`    | string | Tidak | Email pelapor (opsional)                        |
 
 **Contoh Request Body:**
@@ -270,7 +267,7 @@ Submit laporan baru masalah infrastruktur beserta foto, lokasi, dan detail lainn
   "longitude": 106.9945444,
   "address": "Jl. Ahmad Yani, Bekasi Selatan",
   "severity": "sedang",
-  "primary_photo_url": "https://example.com/photo.jpg",
+  "staging_session_id": "e4b6a2c8-9d1f-4c3e-8a7b-2f1d5c6e9a4b",
   "reporter_email": "warga@example.com"
 }
 ```
@@ -280,7 +277,7 @@ Submit laporan baru masalah infrastruktur beserta foto, lokasi, dan detail lainn
 ```json
 {
   "data": {
-    "id": "RPT-jalan-rusak-20260826-a1b2",
+    "id": "d2f8b4a1-7c3e-4f9b-8a5d-6e2c9b0f1a3d",
     "title": "Jalan Berlubang di Jl. Ahmad Yani Bekasi",
     "description": "Lubang berdiameter 1 meter di jalur utama, membahayakan pengendara motor.",
     "latitude": -6.2349858,
@@ -291,7 +288,8 @@ Submit laporan baru masalah infrastruktur beserta foto, lokasi, dan detail lainn
     "source": "user_report",
     "category_name": "Jalan Rusak",
     "category_slug": "jalan-rusak",
-    "photo_url": "https://example.com/photo.jpg",
+    "photo_url": "https://res.cloudinary.com/fixora/image/upload/v1/reports/d2f8b4a1/primary.jpg",
+    "additional_photos": [],
     "total_confirmations": 0,
     "first_reported_at": "2026-08-26T06:15:00Z"
   },
@@ -324,18 +322,23 @@ GET http://127.0.0.1:8080/api/categories/
   "data": [
     {
       "id": "550e8400-e29b-41d4-a716-446655440000",
-      "name": "Bangunan Terbengkalai",
-      "slug": "bangunan-terbengkalai"
+      "name": "Sampah",
+      "slug": "sampah"
     },
     {
       "id": "660f9500-f3ac-52e5-b827-557766550111",
-      "name": "Drainase Tersumbat",
-      "slug": "drainase-tersumbat"
+      "name": "Jalan Rusak",
+      "slug": "jalan-rusak"
     },
     {
       "id": "770a0600-a4bd-63f6-c938-668877660222",
-      "name": "Jalan Rusak",
-      "slug": "jalan-rusak"
+      "name": "Jembatan Rusak",
+      "slug": "jembatan-rusak"
+    },
+    {
+      "id": "880b1700-b5ce-74a7-d049-779988770333",
+      "name": "Bangunan Terbengkalai",
+      "slug": "bangunan-terbengkalai"
     }
   ],
   "message": "Berhasil menampilkan daftar kategori",
@@ -360,6 +363,123 @@ Memicu proses AI News Crawler secara manual untuk mencari berita kerusakan infra
 {
   "data": null,
   "message": "Crawler berhasil di-trigger, berjalan di background",
+  "success": true
+}
+```
+
+---
+
+#### Verification
+
+##### 7. Trigger Verification
+
+Memicu proses verifikasi berlapis (multi-agent) untuk satu laporan. Mengembalikan sesi verifikasi yang aktif bila sudah ada, atau membuat sesi baru dengan status `pending`.
+
+- **Method:** `POST`
+- **Path:** `/api/crawl/verify/trigger/:reportId`
+- **Path Parameters:**
+
+| Parameter  | Tipe   | Wajib | Deskripsi |
+| ---------- | ------ | ----- | --------- |
+| `reportId` | string | Ya    | Report ID |
+
+**Contoh URL Request:**
+
+```http
+POST http://127.0.0.1:8080/api/crawl/verify/trigger/d2f8b4a1-7c3e-4f9b-8a5d-6e2c9b0f1a3d
+```
+
+**Contoh Response Payload:**
+
+```json
+{
+  "data": {
+    "id": "f3c9a5b2-8d4f-4a0c-9b6e-7f3d0c1a2b4e",
+    "report_id": "d2f8b4a1-7c3e-4f9b-8a5d-6e2c9b0f1a3d",
+    "status": "pending",
+    "logs": []
+  },
+  "message": "Berhasil memicu verifikasi",
+  "success": true
+}
+```
+
+##### 8. Retry Verification Session
+
+Mengulang sesi verifikasi yang gagal (status `error`). Sesi dikembalikan ke status `pending` dan field final di-reset.
+
+- **Method:** `POST`
+- **Path:** `/api/crawl/verify/retry/:sessionId`
+- **Path Parameters:**
+
+| Parameter   | Tipe   | Wajib | Deskripsi            |
+| ----------- | ------ | ----- | -------------------- |
+| `sessionId` | string | Ya    | Verification Session ID |
+
+**Contoh Response Payload:**
+
+```json
+{
+  "data": {
+    "id": "f3c9a5b2-8d4f-4a0c-9b6e-7f3d0c1a2b4e",
+    "report_id": "d2f8b4a1-7c3e-4f9b-8a5d-6e2c9b0f1a3d",
+    "status": "pending"
+  },
+  "message": "Berhasil mengulang verifikasi",
+  "success": true
+}
+```
+
+##### 9. Get Verification Sessions by Report
+
+Mengambil seluruh sesi verifikasi (beserta log agen) untuk satu laporan.
+
+- **Method:** `GET`
+- **Path:** `/api/crawl/verify/sessions/:reportId`
+- **Path Parameters:**
+
+| Parameter  | Tipe   | Wajib | Deskripsi |
+| ---------- | ------ | ----- | --------- |
+| `reportId` | string | Ya    | Report ID |
+
+**Contoh Response Payload:**
+
+```json
+{
+  "data": [
+    {
+      "id": "f3c9a5b2-8d4f-4a0c-9b6e-7f3d0c1a2b4e",
+      "report_id": "d2f8b4a1-7c3e-4f9b-8a5d-6e2c9b0f1a3d",
+      "status": "approved",
+      "final_verdict": true,
+      "final_category_slug": "jalan-rusak",
+      "final_severity": "sedang",
+      "final_reasoning": "Foto dan deskripsi konsisten dengan kerusakan jalan.",
+      "decided_by": "skeptic",
+      "started_at": "2026-08-26T06:15:05Z",
+      "completed_at": "2026-08-26T06:16:02Z",
+      "created_at": "2026-08-26T06:15:00Z",
+      "updated_at": "2026-08-26T06:16:02Z",
+      "logs": [
+        {
+          "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+          "session_id": "f3c9a5b2-8d4f-4a0c-9b6e-7f3d0c1a2b4e",
+          "agent_role": "advocate",
+          "llm_provider": "gemini",
+          "llm_model": "gemini-3.5-flash-lite",
+          "verdict": true,
+          "confidence": 0.94,
+          "category_slug": "jalan-rusak",
+          "severity": "sedang",
+          "raw_argument": "Foto menunjukkan lubang jalan yang nyata.",
+          "prompt_used": "Kamu adalah agen advokat...",
+          "latency_ms": 8400,
+          "created_at": "2026-08-26T06:15:11Z"
+        }
+      ]
+    }
+  ],
+  "message": "Berhasil menampilkan sesi verifikasi",
   "success": true
 }
 ```
