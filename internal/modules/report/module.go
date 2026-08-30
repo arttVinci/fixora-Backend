@@ -8,19 +8,23 @@ import (
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/repository"
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/seeder"
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/usecase"
+	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/worker"
 	verification_client "github.com/arttVinci/fixora-Backend/internal/modules/verification-client"
 	"github.com/arttVinci/fixora-Backend/internal/shared/client"
+	sharedconfig "github.com/arttVinci/fixora-Backend/internal/shared/config"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/generative-ai-go/genai"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
+	"time"
 )
 
 type Module struct {
 	Controller         *controller.ReportController
 	CategoryController *controller.CategoryController
 	UseCase            *usecase.ReportUseCase
+	cleanupWorker      *worker.StagingCleanupWorker
 	client             *clientImpl
 	db                 *gorm.DB
 	log                *logrus.Logger
@@ -40,8 +44,17 @@ func New(
 	reporterRepo := repository.NewReporterRepository(log)
 	photoRepo := repository.NewReportPhotoRepository(log)
 
+	cloudinarySDK, _ := sharedconfig.NewCloudinary(config)
+	cloudinaryClient := client.NewCloudinaryClient(cloudinarySDK, log)
 	nominatimClient := client.NewNominatimClient(log)
-	analyzePhotoUseCase := usecase.NewAnalyzePhotoUseCase(db, log, validate, genaiClient)
+
+	ttlHours := config.GetInt("cloudinary.staging_ttl_hours")
+	if ttlHours <= 0 {
+		ttlHours = 24
+	}
+	cleanupWorker := worker.NewStagingCleanupWorker(log, cloudinaryClient, time.Duration(ttlHours)*time.Hour)
+
+	analyzePhotoUseCase := usecase.NewAnalyzePhotoUseCase(db, log, validate, genaiClient, cloudinaryClient)
 
 	duplicateUseCase := usecase.NewDuplicateUseCase(db, log, validate, reportRepo, duplicateRepo, genaiClient)
 
@@ -58,6 +71,7 @@ func New(
 		clientImpl,
 		regionClient,
 		nominatimClient,
+		cloudinaryClient,
 	)
 
 	reportController := controller.NewReportController(reportUseCase, analyzePhotoUseCase, log)
@@ -68,6 +82,7 @@ func New(
 		Controller:         reportController,
 		CategoryController: categoryController,
 		UseCase:            reportUseCase,
+		cleanupWorker:      cleanupWorker,
 		client:             clientImpl,
 		db:                 db,
 		log:                log,

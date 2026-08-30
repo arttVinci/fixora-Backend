@@ -6,9 +6,14 @@ import (
 )
 
 func NewCloudinary(config *viper.Viper) (*cloudinary.Cloudinary, error) {
-    return cloudinary.NewFromParams(
-        config.GetString("cloudinary.cloud_name"),
-        config.GetString("cloudinary.api_key"),
-        config.GetString("cloudinary.api_secret"),
-    )
+	cloudName := config.GetString("cloudinary.cloud_name")
+	if cloudName == "" {
+		return nil, nil
+	}
+
+	return cloudinary.NewFromParams(
+		cloudName,
+		config.GetString("cloudinary.api_key"),
+		config.GetString("cloudinary.api_secret"),
+	)
 }

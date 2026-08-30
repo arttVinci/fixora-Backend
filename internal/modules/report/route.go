@@ -5,8 +5,11 @@ import (
 )
 
 func (m *Module) RegisterRoutes(router fiber.Router) {
-	group := router.Group("/reports")
+	if m.cleanupWorker != nil {
+		m.cleanupWorker.StartScheduler()
+	}
 
+	group := router.Group("/reports")
 	group.Get("/map", m.Controller.SearchMap)
 	group.Get("/:id", m.Controller.GetDetail)
 	group.Post("/analyze-photo", m.Controller.AnalyzePhoto)
