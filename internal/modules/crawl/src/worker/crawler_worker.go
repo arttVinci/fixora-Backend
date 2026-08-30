@@ -71,7 +71,11 @@ func (w *CrawlerWorker) StartScheduler() error {
 }
 
 func (w *CrawlerWorker) RunCrawler() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	// Deadline harus lebih besar dari total waktu pemrosesan sekuensial:
+	// ±442 artikel × 15 detik (rate limiter Gemini free tier) ≈ 110 menit,
+	// plus waktu fetch RSS. 30 menit sebelumnya terlalu kecil sehingga run
+	// selalu terpotong di tengah (artikel tersisa gagal LLM).
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Hour)
 	defer cancel()
 
 	categories, err := w.ReportClient.GetAllCategories(w.CrawlerUseCase.DB.WithContext(ctx))
@@ -124,6 +128,13 @@ func (w *CrawlerWorker) processArticles(ctx context.Context, articles map[string
 	processed := 0
 
 	for _, article := range articles {
+		// Deadline habis → hentikan pemrosesan. Sisa artikel dibiarkan tidak
+		// diproses sehingga bisa dilanjutkan run berikutnya (dedup via URL).
+		if err := ctx.Err(); err != nil {
+			w.Log.Warnf("Crawler context deadline reached, stopping early: %v", err)
+			break
+		}
+
 		if w.CrawlerUseCase.IsArticleProcessed(ctx, article.URL) {
 			continue
 		}
@@ -138,7 +149,10 @@ func (w *CrawlerWorker) processArticles(ctx context.Context, articles map[string
 
 		extraction, err := w.LlmClient.ExtractNewsInfo(artCtx, article.Title, article.Content)
 		if err != nil || extraction == nil {
-			_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, article.URL, article.Title, article.Content, article.SourceName, "llm_extraction_failed", publishedAt, crawledAt)
+			// Kegagalan LLM (rate limit, deadline, network) bersifat transien.
+			// Jangan di-persist sebagai rejected — biarkan URL tetap bisa
+			// di-retry pada run berikutnya.
+			w.Log.Warnf("LLM extraction failed (transient, will retry next run): %+v", err)
 			cancel()
 			continue
 		}

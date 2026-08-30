@@ -53,6 +53,13 @@ func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *model.Proce
 	tx := c.DB.WithContext(ctx).Begin()
 	defer tx.Rollback()
 
+	// Bersihkan baris lama (mis. gagal transien LLM) agar tidak bentrok dengan
+	// unique index pada kolom url saat insert ulang.
+	if err := c.CrawledArticleRepository.DeleteByURL(tx, req.URL); err != nil {
+		c.Log.Warnf("Failed to delete stale crawled article : %+v", err)
+		return fiber.NewError(fiber.StatusInternalServerError, "Gagal membersihkan data artikel lama")
+	}
+
 	articleID := infra.GenerateArticleID(req.SourceName)
 	content := req.Content
 	crawled := &entity.CrawledArticle{
@@ -121,6 +128,12 @@ func (c *CrawlerUseCase) SaveCrawledReport(ctx context.Context, req *model.Proce
 func (c *CrawlerUseCase) SaveRejectedArticle(ctx context.Context, url, title, content, sourceName, reason string, publishedAt, crawledAt time.Time) error {
 	tx := c.DB.WithContext(ctx).Begin()
 	defer tx.Rollback()
+	// Bersihkan baris lama (mis. gagal transien LLM) agar tidak bentrok dengan
+	// unique index pada kolom url saat insert ulang.
+	if err := c.CrawledArticleRepository.DeleteByURL(tx, url); err != nil {
+		c.Log.Warnf("Failed to delete stale crawled article : %+v", err)
+		return fiber.NewError(fiber.StatusInternalServerError, "Gagal membersihkan data artikel lama")
+	}
 
 	article := &entity.CrawledArticle{
 		ID:           infra.GenerateArticleID(sourceName),

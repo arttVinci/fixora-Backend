@@ -19,7 +19,17 @@ func NewCrawledRepository(log *logrus.Logger) *CrawledRepository {
 }
 
 func (r *CrawledRepository) FindByURL(db *gorm.DB, article *entity.CrawledArticle, url string) error {
-	return db.Where("url = ?", url).First(article).Error
+	// reject_reason = "llm_extraction_failed" bersifat transien (rate limit/
+	// deadline), bukan keputusan bisnis final. Baris dengan reason ini dianggap
+	// belum selesai diproses sehingga URL-nya tetap bisa di-retry.
+	return db.Where("url = ? AND (reject_reason IS NULL OR reject_reason != ?)", url, "llm_extraction_failed").First(article).Error
+}
+
+// DeleteByURL menghapus baris lama untuk URL tertentu sebelum insert ulang.
+// Dipakai saat me-retry artikel yang sebelumnya gagal transien (LLM) sehingga
+// tidak bentrok dengan unique index pada kolom url.
+func (r *CrawledRepository) DeleteByURL(db *gorm.DB, url string) error {
+	return db.Where("url = ?", url).Delete(&entity.CrawledArticle{}).Error
 }
 
 func (r *CrawledRepository) UpdateStatusAndReportID(db *gorm.DB, id string, status string, reportID string) error {
