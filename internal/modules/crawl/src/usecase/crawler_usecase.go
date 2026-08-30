@@ -10,7 +10,6 @@ import (
 	"github.com/arttVinci/fixora-Backend/internal/modules/crawl/src/repository"
 	region_client "github.com/arttVinci/fixora-Backend/internal/modules/region-client"
 	report_client "github.com/arttVinci/fixora-Backend/internal/modules/report-client"
-	verification_client "github.com/arttVinci/fixora-Backend/internal/modules/verification-client"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/sirupsen/logrus"
@@ -24,7 +23,6 @@ type CrawlerUseCase struct {
 	CrawledArticleRepository *repository.CrawledRepository
 	ReportClient             report_client.Client
 	RegionClient             region_client.Client
-	VerificationClient       verification_client.Client
 }
 
 func NewCrawlerUseCase(
