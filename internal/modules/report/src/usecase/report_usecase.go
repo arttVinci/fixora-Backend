@@ -73,7 +73,74 @@ func (c *ReportUseCase) GetDetail(ctx context.Context, id string) (*model.Report
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal mengambil data laporan")
 	}
 
-	return converter.ReportToDetailResponse(report), nil
+	resp := converter.ReportToDetailResponse(report)
+	resp.RelatedReports = c.collectRelatedReports(tx, report)
+	return resp, nil
+}
+
+// collectRelatedReports returns reports related to the given report:
+// merged children, the parent (if this report is merged), its siblings, and
+// non-merged reports within 100 meters — de-duplicated and excluding itself.
+func (c *ReportUseCase) collectRelatedReports(tx *gorm.DB, report *entity.Report) []model.ReportMapResponse {
+	const radiusMeters = 100.0
+
+	seen := map[string]bool{report.ID: true}
+	var related []entity.Report
+	appendUnique := func(items []entity.Report) {
+		for _, item := range items {
+			if !seen[item.ID] {
+				seen[item.ID] = true
+				related = append(related, item)
+			}
+		}
+	}
+
+	// 1. Children merged into this report (this report is the parent).
+	if children, err := c.ReportRepository.FindMergedChildren(tx, report.ID); err == nil {
+		appendUnique(children)
+	} else {
+		c.Log.Warnf("Failed to load merged children for %s: %+v", report.ID, err)
+	}
+
+	// 1b. Reports that were merged into this report's own merged children
+	// (multi-level merge chains), so every child still exposes its subtree.
+	for _, child := range related {
+		if child.MergedIntoID != nil && *child.MergedIntoID == report.ID {
+			if grandChildren, err := c.ReportRepository.FindMergedChildren(tx, child.ID); err == nil {
+				appendUnique(grandChildren)
+			} else {
+				c.Log.Warnf("Failed to load grandchildren for %s: %+v", child.ID, err)
+			}
+		}
+	}
+
+	// 2. If this report is itself merged, include the parent and its other children.
+	if report.MergedIntoID != nil && *report.MergedIntoID != "" {
+		parent := new(entity.Report)
+		if err := c.ReportRepository.FindDetailByID(tx, parent, *report.MergedIntoID); err == nil {
+			appendUnique([]entity.Report{*parent})
+		} else {
+			c.Log.Warnf("Failed to load parent %s for %s: %+v", *report.MergedIntoID, report.ID, err)
+		}
+		if siblings, err := c.ReportRepository.FindMergedChildren(tx, *report.MergedIntoID); err == nil {
+			appendUnique(siblings)
+		}
+	}
+
+	// 3. Nearby non-merged reports within radius.
+	if nearby, err := c.ReportRepository.FindNearby(tx, report.Latitude, report.Longitude, radiusMeters, report.ID); err == nil {
+		appendUnique(nearby)
+	} else {
+		c.Log.Warnf("Failed to load nearby reports for %s: %+v", report.ID, err)
+	}
+
+	responses := make([]model.ReportMapResponse, 0, len(related))
+	for _, item := range related {
+		if resp := converter.ReportToMapResponse(&item); resp != nil {
+			responses = append(responses, *resp)
+		}
+	}
+	return responses
 }
 
 func (c *ReportUseCase) SearchMap(ctx context.Context, request *model.SearchReportMapRequest) ([]model.ReportMapResponse, error) {
