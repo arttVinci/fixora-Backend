@@ -68,6 +68,7 @@ func New(
 	reportUseCase := usecase.NewReportUseCase(
 		db, log, validate,
 		reportRepo, reporterRepo, photoRepo,
+		duplicateRepo,
 		clientImpl,
 		regionClient,
 		nominatimClient,

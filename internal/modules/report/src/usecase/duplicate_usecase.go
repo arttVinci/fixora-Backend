@@ -2,7 +2,6 @@ package usecase
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -64,80 +63,100 @@ func (u *DuplicateUseCase) CheckDuplicate(ctx context.Context, reportID string) 
 		return nil
 	}
 
-	// 1. Deterministic proximity merge: same category within 100 meters.
-	//    Proximity alone decides the merge (no lower time window). The parent
-	//    must be no newer than this report so it is always the oldest report
-	//    in the cluster, independent of check order.
-	maxFirstReportedAt := time.Now()
-	if report.FirstReportedAt != nil {
-		maxFirstReportedAt = *report.FirstReportedAt
-	}
-
-	parent, err := u.ReportRepository.FindParentCandidate(
+	// Coarse filter: same category, non-merged, within 100 meters, excluding
+	// itself. Ordered oldest-first so the merge parent is always the earliest
+	// report in the cluster, independent of check order.
+	candidates, err := u.ReportRepository.FindSameCategoryNearby(
 		db,
 		report.Latitude,
 		report.Longitude,
-		100.0, // 100 meters radius
+		100.0,
 		report.CategoryID,
 		report.ID,
-		maxFirstReportedAt,
 	)
 	if err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			u.Log.Warnf("Failed to find nearby parent candidate for report %s: %+v", reportID, err)
-			return err
-		}
-		u.Log.Infof("No nearby same-category candidate within 100m found for report %s", reportID)
+		u.Log.Warnf("Failed to find nearby same-category candidates for report %s: %+v", reportID, err)
+		return err
+	}
+	if len(candidates) == 0 {
 		return nil
 	}
 
-	u.Log.Infof("Found proximity parent %s within 100m for report %s (distance-based merge)", parent.ID, reportID)
+	// Fine filter: perceptual hash of the primary photo.
+	currentHash, _ := u.primaryPhotoHash(db, report)
 
-	matchReason := "nearby_location"
-	matchScore := u.proximityScore(report.Latitude, report.Longitude, parent.Latitude, parent.Longitude)
+	// 1. ALWAYS record every detected similarity to duplicate_reports,
+	//    regardless of whether a merge happens.
+	// 2. Merge ONLY when the photo is identical AND the source is the same.
+	var mergeParent *entity.Report
+	for i := range candidates {
+		candidate := &candidates[i]
 
-	// 2. If the proximity parent's photo is perceptually identical to this
-	//    report's primary photo, upgrade the evidence to identical_photo.
-	if currentHash, currentPhoto := u.primaryPhotoHash(db, report); currentHash != nil && currentPhoto != nil {
-		if parentHash, err := u.photoHashFor(db, parent); err == nil && parentHash != nil {
-			if dist, err := currentHash.Distance(parentHash); err == nil && dist <= 5 {
-				u.Log.Infof("pHash distance between %s and proximity parent %s: %d", report.ID, parent.ID, dist)
-				matchReason = "identical_photo"
-				matchScore = 1.0 - (float64(dist) / 64.0)
+		reason := "nearby_location"
+		score := u.proximityScore(report.Latitude, report.Longitude, candidate.Latitude, candidate.Longitude)
+		identical := false
+
+		if currentHash != nil {
+			if candidateHash, err := u.photoHashFor(db, candidate); err == nil && candidateHash != nil {
+				if dist, err := currentHash.Distance(candidateHash); err == nil && dist <= 5 {
+					u.Log.Infof("pHash distance between %s and %s: %d", report.ID, candidate.ID, dist)
+					reason = "identical_photo"
+					score = 1.0 - (float64(dist) / 64.0)
+					identical = true
+				}
 			}
+		}
+
+		if err := u.recordSimilarity(ctx, report.ID, candidate.ID, reason, score); err != nil {
+			return err
+		}
+
+		if identical && report.SourceType == candidate.SourceType && mergeParent == nil {
+			mergeParent = candidate
 		}
 	}
 
-	// 3. Execute Merge
-	u.Log.Infof("Report %s matched as duplicate of parent %s (reason: %s, score: %.2f)", reportID, parent.ID, matchReason, matchScore)
+	if mergeParent == nil {
+		u.Log.Infof("Report %s has %d related report(s) but no identical same-source match; no merge", reportID, len(candidates))
+		return nil
+	}
 
-	tx := u.DB.WithContext(ctx).Begin()
-	defer tx.Rollback()
+	u.Log.Infof("Report %s merged into %s (identical photo, same source %s)", reportID, mergeParent.ID, report.SourceType)
 
-	if err := u.ReportRepository.SetMergedInto(tx, reportID, parent.ID); err != nil {
+	if err := u.ReportRepository.SetMergedInto(db, reportID, mergeParent.ID); err != nil {
 		u.Log.Warnf("Failed to set merged_into_id for report %s: %+v", reportID, err)
 		return err
 	}
 
-	dupEntry := &entity.DuplicateReport{
-		ID:              uuid.NewString(),
-		ReportID:        reportID,
-		ParentID:        parent.ID,
-		Reason:          matchReason,
-		SimilarityScore: matchScore,
+	return nil
+}
+
+// recordSimilarity persists a similarity audit row idempotently, so re-running
+// the duplicate check never duplicates the audit trail.
+func (u *DuplicateUseCase) recordSimilarity(ctx context.Context, reportID, parentID, reason string, score float64) error {
+	db := u.DB.WithContext(ctx)
+
+	exists, err := u.DuplicateReportRepository.ExistsByReportAndParent(db, reportID, parentID)
+	if err != nil {
+		u.Log.Warnf("Failed to check existing duplicate entry: %+v", err)
+		return err
+	}
+	if exists {
+		return nil
 	}
 
-	if err := u.DuplicateReportRepository.Create(tx, dupEntry); err != nil {
+	entry := &entity.DuplicateReport{
+		ID:              uuid.NewString(),
+		ReportID:        reportID,
+		ParentID:        parentID,
+		Reason:          reason,
+		SimilarityScore: score,
+	}
+
+	if err := u.DuplicateReportRepository.Create(db, entry); err != nil {
 		u.Log.Warnf("Failed to create duplicate_reports entry: %+v", err)
 		return err
 	}
-
-	if err := tx.Commit().Error; err != nil {
-		u.Log.Warnf("Failed commit duplicate merge transaction for report %s: %+v", reportID, err)
-		return err
-	}
-
-	u.Log.Infof("Successfully merged report %s into parent %s", reportID, parent.ID)
 
 	return nil
 }
