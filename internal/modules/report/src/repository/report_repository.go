@@ -121,17 +121,58 @@ func (r *ReportRepository) FilterList(request *model.SearchReportListRequest) fu
 	}
 }
 
-func (r *ReportRepository) FindNearbyByCategory(db *gorm.DB, lat, lng float64, radiusMeters float64, categoryID string, excludeID string, since time.Time) ([]entity.Report, error) {
+func (r *ReportRepository) FindMergedChildren(db *gorm.DB, parentID string) ([]entity.Report, error) {
 	var items []entity.Report
-	haversine := "(6371000 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude))))"
+	err := db.
+		Preload("Category").
+		Preload("Photos").
+		Where("merged_into_id = ?", parentID).
+		Find(&items).Error
+	if err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+// FindParentCandidate returns the deterministic merge parent for a same-category
+// report located within radiusMeters: the earliest non-merged report that is
+// no newer than the candidate report itself (the parent is always the oldest
+// report in the cluster, independent of check order). Proximity alone decides
+// the merge; no lower time window is applied.
+func (r *ReportRepository) FindParentCandidate(db *gorm.DB, lat, lng float64, radiusMeters float64, categoryID string, excludeID string, maxFirstReportedAt time.Time) (*entity.Report, error) {
+	var item entity.Report
+	// Numerically stable haversine (ASIN form): the ACOS form returns NULL for
+	// identical coordinates because its argument can round above 1.0.
+	haversine := "(6371000 * 2 * ASIN(SQRT(POWER(SIN(RADIANS(latitude - ?) / 2), 2) + COS(RADIANS(?)) * COS(RADIANS(latitude)) * POWER(SIN(RADIANS(longitude - ?) / 2), 2))))"
 
 	err := db.
+		Preload("Category").
 		Preload("Photos").
 		Where("category_id = ?", categoryID).
 		Where("merged_into_id IS NULL").
 		Where("id != ?", excludeID).
-		Where("first_reported_at >= ?", since).
-		Where(haversine+" <= ?", lat, lng, lat, radiusMeters).
+		Where("first_reported_at <= ?", maxFirstReportedAt).
+		Where(haversine+" <= ?", lat, lat, lng, radiusMeters).
+		Order("first_reported_at ASC, created_at ASC, id ASC").
+		Take(&item).Error
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *ReportRepository) FindNearby(db *gorm.DB, lat, lng float64, radiusMeters float64, excludeID string) ([]entity.Report, error) {
+	var items []entity.Report
+	// Numerically stable haversine (ASIN form): the ACOS form returns NULL for
+	// identical coordinates because its argument can round above 1.0.
+	haversine := "(6371000 * 2 * ASIN(SQRT(POWER(SIN(RADIANS(latitude - ?) / 2), 2) + COS(RADIANS(?)) * COS(RADIANS(latitude)) * POWER(SIN(RADIANS(longitude - ?) / 2), 2))))"
+
+	err := db.
+		Preload("Category").
+		Preload("Photos").
+		Where("merged_into_id IS NULL").
+		Where("id != ?", excludeID).
+		Where(haversine+" <= ?", lat, lat, lng, radiusMeters).
 		Limit(20).
 		Find(&items).Error
 
@@ -140,7 +181,6 @@ func (r *ReportRepository) FindNearbyByCategory(db *gorm.DB, lat, lng float64, r
 	}
 	return items, nil
 }
-
 func (r *ReportRepository) SetMergedInto(db *gorm.DB, reportID string, parentID string) error {
 	return db.Model(&entity.Report{}).Where("id = ?", reportID).Update("merged_into_id", parentID).Error
 }
