@@ -3,13 +3,16 @@ package usecase
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"path/filepath"
 	"strings"
 
+	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/entity"
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/model"
+	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/repository"
 	"github.com/arttVinci/fixora-Backend/internal/shared/client"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
@@ -20,11 +23,12 @@ import (
 )
 
 type AnalyzePhotoUseCase struct {
-	DB         *gorm.DB
-	Log        *logrus.Logger
-	Validate   *validator.Validate
-	Genai      *genai.Client
-	Cloudinary *client.CloudinaryClient
+	DB                 *gorm.DB
+	Log                *logrus.Logger
+	Validate           *validator.Validate
+	Genai              *genai.Client
+	Cloudinary         *client.CloudinaryClient
+	CategoryRepository *repository.CategoryRepository
 }
 
 func NewAnalyzePhotoUseCase(
@@ -33,13 +37,15 @@ func NewAnalyzePhotoUseCase(
 	validate *validator.Validate,
 	genai *genai.Client,
 	cloudinary *client.CloudinaryClient,
+	categoryRepo *repository.CategoryRepository,
 ) *AnalyzePhotoUseCase {
 	return &AnalyzePhotoUseCase{
-		DB:         db,
-		Log:        log,
-		Validate:   validate,
-		Genai:      genai,
-		Cloudinary: cloudinary,
+		DB:                 db,
+		Log:                log,
+		Validate:           validate,
+		Genai:              genai,
+		Cloudinary:         cloudinary,
+		CategoryRepository: categoryRepo,
 	}
 }
 
@@ -91,23 +97,23 @@ func (i *AnalyzePhotoUseCase) AnalyzeImage(ctx context.Context, image []byte, ex
 		Properties: map[string]*genai.Schema{
 			"title": {
 				Type:        genai.TypeString,
-				Description: "Judul spesifik tempat masalah infrastruktur terjadi.",
+				Description: "Judul singkat masalah infrastruktur.",
 			},
 			"description": {
 				Type:        genai.TypeString,
-				Description: "Jelaskan deskripsi masalah dari gambar tersebut",
+				Description: "Deskripsi singkat masalah dari foto.",
 			},
 			"category": {
 				Type:        genai.TypeString,
-				Description: "Slug kategori masalah: jalan-rusak, sampah, jembatan-rusak, bangunan-terbengkalai",
+				Description: "Slug kategori masalah: jalan-rusak, sampah, jembatan-rusak, bangunan-terbengkalai. Kosongkan jika is_relevant false.",
 			},
 			"severity": {
 				Type:        genai.TypeString,
-				Description: "Tingkat keparahan masalah: ringan, sedang, atau parah.",
+				Description: "Tingkat keparahan masalah: ringan, sedang, atau parah. Kosongkan jika is_relevant false.",
 			},
 			"is_relevant": {
 				Type:        genai.TypeBoolean,
-				Description: "Apakah berita mendeskripsikan masalah infrastruktur spesifik saat ini.",
+				Description: "Apakah foto menunjukkan kerusakan infrastruktur publik yang nyata dan termasuk salah satu dari 4 kategori.",
 			},
 		},
 		Required: []string{"title", "description", "category", "severity", "is_relevant"},
@@ -116,26 +122,35 @@ func (i *AnalyzePhotoUseCase) AnalyzeImage(ctx context.Context, image []byte, ex
 
 	prompt := `Kamu adalah sistem yang menganalisis foto laporan masalah infrastruktur publik di Indonesia.
 
-		Dari foto yang diberikan, analisis dan hasilkan data sesuai skema yang ditentukan.
+Dari foto yang diberikan, analisis dan hasilkan data sesuai skema yang ditentukan.
 
-		Panduan kategori:
-		- jalan-rusak: lubang, retak, aspal terkelupas, jalan ambles
-		- sampah: tumpukan sampah, TPS liar, sampah berserakan
-		- jembatan-rusak: kerusakan struktur jembatan, retak, korosi
-		- bangunan-terbengkalai: bangunan tidak terawat, terbengkalai, rusak dan dibiarkan
+Panduan kategori:
+- jalan-rusak: lubang, retak, aspal terkelupas, jalan ambles
+- sampah: tumpukan sampah, TPS liar, sampah berserakan
+- jembatan-rusak: kerusakan struktur jembatan, retak, korosi
+- bangunan-terbengkalai: bangunan tidak terawat, terbengkalai, rusak dan dibiarkan
 
-		Panduan severity:
-		- ringan: kerusakan kecil, belum mengganggu aktivitas secara signifikan
-		- sedang: kerusakan cukup terlihat, mulai mengganggu aktivitas warga
-		- parah: kerusakan signifikan, berpotensi membahayakan atau sangat mengganggu
+Panduan severity:
+- ringan: kerusakan kecil, belum mengganggu aktivitas secara signifikan
+- sedang: kerusakan cukup terlihat, mulai mengganggu aktivitas warga
+- parah: kerusakan signifikan, berpotensi membahayakan atau sangat mengganggu
 
-		Jika foto tidak jelas menunjukkan salah satu dari 4 kategori di atas, atau foto tidak 
-		relevan dengan masalah infrastruktur (misalnya foto orang, makanan, dokumen, atau 
-		pemandangan tanpa kerusakan yang jelas), set is_relevant menjadi false, dan tetap isi 
-		field lain dengan estimasi terbaik atau nilai default yang masuk akal.
+PENENTUAN is_relevant (WAJIB DIPATUHI, ini penentu utama):
+- is_relevant = true HANYA jika foto secara jelas menunjukkan kerusakan fisik infrastruktur
+  publik yang nyata dan cocok dengan salah satu dari 4 kategori di atas.
+- is_relevant = false untuk SEMUA kondisi berikut:
+  * Bukan infrastruktur publik: foto orang/selfie, hewan, makanan/minuman, barang pribadi,
+    tangkapan layar (screenshot) aplikasi/chat/media sosial, dokumen/teks, struk, logo.
+  * Infrastruktur tetapi TIDAK rusak/bermasalah (jalan mulus, gedung terawat, jalan layang
+    normal, tiang listrik utuh, rambu utuh, dll).
+  * Foto terlalu gelap, blur, terpotong, atau objek tidak dapat dikenali.
+  * Pemandangan alam/gunung/pantai/langit tanpa objek infrastruktur yang rusak.
+- Jika ragu antara relevant dan tidak, pilih is_relevant = false.
+- Ketika is_relevant = false, category WAJIB diisi "" (string kosong) dan severity WAJIB
+  diisi "" (string kosong). title dan description boleh diisi ringkas alasan foto ditolak.
 
-		Jangan mengarang detail yang tidak terlihat di foto (nama lokasi, penyebab kerusakan, 
-		durasi masalah) — foto ini TIDAK memuat informasi lokasi, itu akan didapat dari sumber lain.`
+Jangan mengarang detail yang tidak terlihat di foto (nama lokasi, penyebab kerusakan,
+durasi masalah) — foto ini TIDAK memuat informasi lokasi, itu akan didapat dari sumber lain.`
 
 	response, err := llm.GenerateContent(ctx, genai.Text(prompt), genai.ImageData(extension, image))
 	if err != nil {
@@ -162,6 +177,29 @@ func (i *AnalyzePhotoUseCase) AnalyzeImage(ctx context.Context, image []byte, ex
 	if err := json.Unmarshal([]byte(jsonStr), result); err != nil {
 		i.Log.Warnf("Failed to unmarshal JSON from LLM: %+v (String: %s)", err, jsonStr)
 		return nil, err
+	}
+
+	// Guard: a photo is only usable when it maps to an existing category.
+	// A non-relevant photo, or one the LLM mislabels with an unknown slug,
+	// must not leak a prefillable category/severity to the frontend.
+	if !result.IsRelevant || result.Category == "" {
+		result.IsRelevant = false
+		result.Category = ""
+		result.Severity = ""
+		return result, nil
+	}
+
+	category := new(entity.Category)
+	if err := i.CategoryRepository.FindBySlug(i.DB.WithContext(ctx), category, result.Category); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			i.Log.Warnf("Unknown category slug '%s' from LLM", result.Category)
+			result.IsRelevant = false
+			result.Category = ""
+			result.Severity = ""
+			return result, nil
+		}
+		i.Log.Warnf("Failed to lookup category slug '%s' : %+v", result.Category, err)
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal memvalidasi kategori foto")
 	}
 
 	return result, nil

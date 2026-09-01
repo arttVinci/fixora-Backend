@@ -7,4 +7,5 @@ type IssueAnalysisResultResponse struct {
 	Description string `json:"description"`
 	Category    string `json:"category"`
 	Severity    string `json:"severity"`
+	IsRelevant  bool   `json:"is_relevant"`
 }
