@@ -282,12 +282,18 @@ Upload foto masalah infrastruktur untuk mendapatkan draft otomatis (judul, deskr
     "title": "Jalan Berlubang Besar di Area Perumahan",
     "description": "Terlihat lubang jalan berdiameter sekitar 1 meter dengan kedalaman cukup signifikan di area jalan perumahan.",
     "category": "jalan-rusak",
-    "severity": "sedang"
+    "severity": "sedang",
+    "is_relevant": true
   },
   "message": "Berhasil menganalisis foto",
   "success": true
 }
 ```
+
+Jika foto bukan infrastruktur rusak (screenshot, orang, dokumen, pemandangan, dsb.) atau
+kategori hasil analisis tidak terdaftar, endpoint tetap mengembalikan `200` tetapi dengan
+`is_relevant: false` dan `category`/`severity` kosong. Frontend wajib memblokir submit
+prefill ketika `is_relevant` bernilai `false`.
 
 ##### 4. Create Report (Laporan Warga)
 
