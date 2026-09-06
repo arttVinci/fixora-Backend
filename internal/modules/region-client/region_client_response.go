@@ -5,5 +5,6 @@ type VillageClientResponse struct {
 	Name         string
 	DistrictName string
 	CityName     string
+	CityCode     string
 	ProvinceName string
 }
