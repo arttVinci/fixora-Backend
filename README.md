@@ -212,11 +212,8 @@ Nominatim (OpenStreetMap) dipakai untuk geocoding/reverse geocoding **tanpa API 
 
 Swagger UI dapat diakses di:
 
-👉 **https://api.portofy.net/swagger/index.html**
-
-Secara lokal (saat `docker compose up`), Swagger tersedia di:
-
-👉 **http://127.0.0.1:8080/swagger/index.html**
+- **Produksi**: [https://api.portofy.net/swagger/index.html](https://api.portofy.net/swagger/index.html)
+- **Lokal**: [http://127.0.0.1:8080/swagger/index.html](http://127.0.0.1:8080/swagger/index.html)
 
 ---
 
