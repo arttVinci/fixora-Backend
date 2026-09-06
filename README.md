@@ -25,10 +25,10 @@
 
 Fixora punya dua jalur data yang berjalan paralel, keduanya tampil di peta yang sama:
 
-| Jalur | Sumber | Badge |
-|-------|--------|-------|
-| **Laporan manual warga** | Upload foto + lokasi, dianalisis AI, lalu diverifikasi | `user_report` |
-| **AI News Crawler** | Cron otonom menarik berita infrastruktur dari media, diekstrak LLM, dibuat jadi laporan otomatis | `ai_news` |
+| Jalur                    | Sumber                                                                                           | Badge         |
+| ------------------------ | ------------------------------------------------------------------------------------------------ | ------------- |
+| **Laporan manual warga** | Upload foto + lokasi, dianalisis AI, lalu diverifikasi                                           | `user_report` |
+| **AI News Crawler**      | Cron otonom menarik berita infrastruktur dari media, diekstrak LLM, dibuat jadi laporan otomatis | `ai_news`     |
 
 Selain itu backend juga mengelola: kategori masalah, hierarki wilayah Indonesia, deteksi duplikat, dan verifikasi multi-agent untuk menjaga data tetap kredibel.
 
@@ -51,22 +51,22 @@ Detail lengkap ada di `docs/PROGRESS.md` dan `docs/`.
 
 ## Teknologi
 
-| Layer | Teknologi |
-|-------|-----------|
-| Bahasa | Go 1.25 |
-| HTTP framework | Fiber v2 |
-| ORM | GORM (driver MySQL) |
-| Database | MySQL 8.0 (lokal) / TiDB Cloud (produksi) |
-| Config | Viper (`config.json` + env override) |
-| Validasi | go-playground/validator |
-| Logging | Logrus |
-| Scheduler | robfig/cron v3 |
-| RSS parsing | gofeed |
-| AI (CV + ekstraksi berita) | Google Gemini (`gemini-3.5-flash-lite`) |
+| Layer                       | Teknologi                                                   |
+| --------------------------- | ----------------------------------------------------------- |
+| Bahasa                      | Go 1.25                                                     |
+| HTTP framework              | Fiber v2                                                    |
+| ORM                         | GORM (driver MySQL)                                         |
+| Database                    | MySQL 8.0 (lokal) / TiDB Cloud (produksi)                   |
+| Config                      | Viper (`config.json` + env override)                        |
+| Validasi                    | go-playground/validator                                     |
+| Logging                     | Logrus                                                      |
+| Scheduler                   | robfig/cron v3                                              |
+| RSS parsing                 | gofeed                                                      |
+| AI (CV + ekstraksi berita)  | Google Gemini (`gemini-3.5-flash-lite`)                     |
 | AI (verifikasi multi-agent) | CommandCode (OpenAI-compatible, model `qwen/qwen3.7-flash`) |
-| Geocoding | Nominatim (OpenStreetMap, gratis) |
-| Penyimpanan foto | Cloudinary |
-| Deteksi duplikat foto | goimagehash (perceptual hash) |
+| Geocoding                   | Nominatim (OpenStreetMap, gratis)                           |
+| Penyimpanan foto            | Cloudinary                                                  |
+| Deteksi duplikat foto       | goimagehash (perceptual hash)                               |
 
 ---
 
@@ -179,26 +179,26 @@ Konfigurasi utama ada di `config.json` (dibaca Viper). Struktur lengkap:
 
 ### Penjelasan tiap blok
 
-| Blok | Fungsi |
-|------|--------|
-| `web` | Port + prefork Fiber |
-| `database` | Koneksi MySQL/TiDB (username, password, host, port, name, pool) |
-| `jwt` | Secret (disediakan untuk kebutuhan auth mendatang) |
+| Blok               | Fungsi                                                                                    |
+| ------------------ | ----------------------------------------------------------------------------------------- |
+| `web`              | Port + prefork Fiber                                                                      |
+| `database`         | Koneksi MySQL/TiDB (username, password, host, port, name, pool)                           |
+| `jwt`              | Secret (disediakan untuk kebutuhan auth mendatang)                                        |
 | `google_ai_studio` | API key Gemini — untuk **CV classifier** (analisis foto) & **ekstraksi berita** (crawler) |
-| `llm_provider` | Base URL + API key CommandCode (OpenAI-compatible) — untuk **verifikasi multi-agent** |
-| `cloudinary` | Kredensial penyimpanan foto (staging → permanent) |
+| `llm_provider`     | Base URL + API key CommandCode (OpenAI-compatible) — untuk **verifikasi multi-agent**     |
+| `cloudinary`       | Kredensial penyimpanan foto (staging → permanent)                                         |
 
 ### Override via environment variable
 
 Koneksi database bisa di-override lewat env var (diprioritaskan di atas `config.json`):
 
-| Env var | Menimpa |
-|---------|---------|
-| `DB_HOST` | `database.host` |
-| `DB_USER` | `database.username` |
+| Env var       | Menimpa             |
+| ------------- | ------------------- |
+| `DB_HOST`     | `database.host`     |
+| `DB_USER`     | `database.username` |
 | `DB_PASSWORD` | `database.password` |
-| `DB_NAME` | `database.name` |
-| `DB_PORT` | `database.port` |
+| `DB_NAME`     | `database.name`     |
+| `DB_PORT`     | `database.port`     |
 
 > **Penting saat pakai Docker Compose:** nilai `username`/`password`/`name` di `config.json` harus sama dengan `MYSQL_USER`/`MYSQL_PASSWORD`/`MYSQL_DATABASE` di `.env`, dan `database.host` harus `fixora_mysql` (nama container), bukan `localhost`.
 
@@ -223,32 +223,32 @@ Base URL: `/api`
 
 ### Reports
 
-| Method | Path | Deskripsi |
-|--------|------|-----------|
-| `GET` | `/reports/map` | Data peta berdasarkan bounding box (`min_lat`, `max_lat`, `min_lng`, `max_lng`) + filter `category_id`, `status`, `severity`, `source_type` |
-| `GET` | `/reports/:id` | Detail satu laporan (+ foto, konfirmasi, `related_reports`) |
-| `POST` | `/reports/analyze-photo` | Analisis foto (CV classifier) → draft otomatis (title, deskripsi, kategori, severity, lokasi) |
-| `POST` | `/reports` | Submit laporan warga (dengan `staging_session_id` dari `analyze-photo`) |
+| Method | Path                     | Deskripsi                                                                                                                                   |
+| ------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/reports/map`           | Data peta berdasarkan bounding box (`min_lat`, `max_lat`, `min_lng`, `max_lng`) + filter `category_id`, `status`, `severity`, `source_type` |
+| `GET`  | `/reports/:id`           | Detail satu laporan (+ foto, konfirmasi, `related_reports`)                                                                                 |
+| `POST` | `/reports/analyze-photo` | Analisis foto (CV classifier) → draft otomatis (title, deskripsi, kategori, severity, lokasi)                                               |
+| `POST` | `/reports`               | Submit laporan warga (dengan `staging_session_id` dari `analyze-photo`)                                                                     |
 
 ### Categories
 
-| Method | Path | Deskripsi |
-|--------|------|-----------|
-| `GET` | `/categories` | Daftar kategori masalah |
+| Method | Path          | Deskripsi               |
+| ------ | ------------- | ----------------------- |
+| `GET`  | `/categories` | Daftar kategori masalah |
 
 ### Crawl
 
-| Method | Path | Deskripsi |
-|--------|------|-----------|
+| Method | Path             | Deskripsi                                    |
+| ------ | ---------------- | -------------------------------------------- |
 | `POST` | `/crawl/trigger` | Trigger crawler manual (jalan di background) |
 
 ### Verification
 
-| Method | Path | Deskripsi |
-|--------|------|-----------|
-| `POST` | `/crawl/verify/trigger/:reportId` | Trigger verifikasi untuk satu laporan |
-| `POST` | `/crawl/verify/retry/:sessionId` | Ulang sesi verifikasi yang error |
-| `GET` | `/crawl/verify/sessions/:reportId` | Daftar sesi verifikasi (+ log agent) untuk satu laporan |
+| Method | Path                               | Deskripsi                                               |
+| ------ | ---------------------------------- | ------------------------------------------------------- |
+| `POST` | `/crawl/verify/trigger/:reportId`  | Trigger verifikasi untuk satu laporan                   |
+| `POST` | `/crawl/verify/retry/:sessionId`   | Ulang sesi verifikasi yang error                        |
+| `GET`  | `/crawl/verify/sessions/:reportId` | Daftar sesi verifikasi (+ log agent) untuk satu laporan |
 
 ### Region
 
@@ -260,7 +260,7 @@ Setiap endpoint mengembalikan envelope seragam `WebResponse[T]`:
 
 ```json
 {
-  "data": { },
+  "data": {},
   "message": "Pesan opsional",
   "success": true
 }
@@ -329,11 +329,11 @@ Setelah report dibuat:
 
 ### 4. Background workers (cron)
 
-| Worker | Frekuensi | Tugas |
-|--------|-----------|-------|
-| AI News Crawler | tiap 2 jam | Tarik + proses berita |
-| Verifikasi | tiap 30 detik | Jalankan sesi verifikasi pending |
-| Staging cleanup | tiap 1 jam | Hapus foto staging orphan > TTL |
+| Worker          | Frekuensi     | Tugas                            |
+| --------------- | ------------- | -------------------------------- |
+| AI News Crawler | tiap 2 jam    | Tarik + proses berita            |
+| Verifikasi      | tiap 30 detik | Jalankan sesi verifikasi pending |
+| Staging cleanup | tiap 1 jam    | Hapus foto staging orphan > TTL  |
 
 ---
 
