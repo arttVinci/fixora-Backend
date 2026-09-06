@@ -197,6 +197,17 @@ func (w *CrawlerWorker) processArticles(ctx context.Context, articles map[string
 			continue
 		}
 
+		// Validasi scope wilayah: hanya terima report yang berada di Jabodetabek.
+		// Nominatim + resolve village bisa mengembalikan lokasi di luar scope
+		// (mis. Pangandaran, Lampung, Banjarmasin) karena query RSS Google News
+		// tidak membatasi hasil secara geografis. Kode BPS kota (2 digit setelah
+		// kode provinsi) dipakai sebagai penjaga agar data tidak ngawur.
+		if !w.isInJabodetabek(village.CityCode) {
+			_ = w.CrawlerUseCase.SaveRejectedArticle(artCtx, article.URL, article.Title, article.Content, article.SourceName, "outside_jabodetabek", publishedAt, crawledAt)
+			cancel()
+			continue
+		}
+
 		req := &model.ProcessCrawledArticleRequest{
 			URL:          article.URL,
 			Title:        article.Title,
@@ -338,4 +349,24 @@ func parsePublishedAt(value string) time.Time {
 	}
 
 	return time.Now()
+}
+
+// isInJabodetabek memutuskan apakah sebuah report berada dalam scope wilayah
+// Jabodetabek (DKI Jakarta + Bogor + Depok + Tangerang + Bekasi) berdasarkan
+// kode BPS kota/kabupaten (5 digit pertama kode wilayah BPS).
+//
+// Kode diambil dari seed regions (kolom cities.code):
+//   31.01, 31.71-31.75  -> DKI Jakarta (termasuk Kep. Seribu)
+//   32.01, 32.71        -> Bogor
+//   32.76               -> Depok
+//   36.03, 36.71, 36.74 -> Tangerang / Tangerang Selatan
+//   32.16, 32.75        -> Bekasi
+func (w *CrawlerWorker) isInJabodetabek(cityCode string) bool {
+	switch cityCode {
+	case "31.01", "31.71", "31.72", "31.73", "31.74", "31.75",
+		"32.01", "32.16", "32.71", "32.75", "32.76",
+		"36.03", "36.71", "36.74":
+		return true
+	}
+	return false
 }

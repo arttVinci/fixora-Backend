@@ -2,11 +2,11 @@ package usecase
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -49,13 +49,6 @@ func NewDuplicateUseCase(
 	}
 }
 
-type llmDuplicateResult struct {
-	IsDuplicate     bool    `json:"is_duplicate"`
-	MatchedReportID string  `json:"matched_report_id"`
-	Reason          string  `json:"reason"`
-	Confidence      float64 `json:"confidence"`
-}
-
 func (u *DuplicateUseCase) CheckDuplicate(ctx context.Context, reportID string) error {
 	db := u.DB.WithContext(ctx)
 
@@ -70,8 +63,127 @@ func (u *DuplicateUseCase) CheckDuplicate(ctx context.Context, reportID string) 
 		return nil
 	}
 
-	// 1. Get or compute perceptual hash for current report if it has primary photo
-	var currentHash *goimagehash.ImageHash
+	// Coarse filter: same category, non-merged, within 100 meters, excluding
+	// itself. Ordered oldest-first so the merge parent is always the earliest
+	// report in the cluster, independent of check order.
+	candidates, err := u.ReportRepository.FindSameCategoryNearby(
+		db,
+		report.Latitude,
+		report.Longitude,
+		100.0,
+		report.CategoryID,
+		report.ID,
+	)
+	if err != nil {
+		u.Log.Warnf("Failed to find nearby same-category candidates for report %s: %+v", reportID, err)
+		return err
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	// Fine filter: perceptual hash of the primary photo.
+	currentHash, _ := u.primaryPhotoHash(db, report)
+
+	// 1. ALWAYS record every detected similarity to duplicate_reports,
+	//    regardless of whether a merge happens.
+	// 2. Merge ONLY when the photo is identical AND the source is the same.
+	var mergeParent *entity.Report
+	for i := range candidates {
+		candidate := &candidates[i]
+
+		reason := "nearby_location"
+		score := u.proximityScore(report.Latitude, report.Longitude, candidate.Latitude, candidate.Longitude)
+		identical := false
+
+		if currentHash != nil {
+			if candidateHash, err := u.photoHashFor(db, candidate); err == nil && candidateHash != nil {
+				if dist, err := currentHash.Distance(candidateHash); err == nil && dist <= 5 {
+					u.Log.Infof("pHash distance between %s and %s: %d", report.ID, candidate.ID, dist)
+					reason = "identical_photo"
+					score = 1.0 - (float64(dist) / 64.0)
+					identical = true
+				}
+			}
+		}
+
+		if err := u.recordSimilarity(ctx, report.ID, candidate.ID, reason, score); err != nil {
+			return err
+		}
+
+		if identical && report.SourceType == candidate.SourceType && mergeParent == nil {
+			mergeParent = candidate
+		}
+	}
+
+	if mergeParent == nil {
+		u.Log.Infof("Report %s has %d related report(s) but no identical same-source match; no merge", reportID, len(candidates))
+		return nil
+	}
+
+	u.Log.Infof("Report %s merged into %s (identical photo, same source %s)", reportID, mergeParent.ID, report.SourceType)
+
+	if err := u.ReportRepository.SetMergedInto(db, reportID, mergeParent.ID); err != nil {
+		u.Log.Warnf("Failed to set merged_into_id for report %s: %+v", reportID, err)
+		return err
+	}
+
+	return nil
+}
+
+// recordSimilarity persists a similarity audit row idempotently, so re-running
+// the duplicate check never duplicates the audit trail.
+func (u *DuplicateUseCase) recordSimilarity(ctx context.Context, reportID, parentID, reason string, score float64) error {
+	db := u.DB.WithContext(ctx)
+
+	exists, err := u.DuplicateReportRepository.ExistsByReportAndParent(db, reportID, parentID)
+	if err != nil {
+		u.Log.Warnf("Failed to check existing duplicate entry: %+v", err)
+		return err
+	}
+	if exists {
+		return nil
+	}
+
+	entry := &entity.DuplicateReport{
+		ID:              uuid.NewString(),
+		ReportID:        reportID,
+		ParentID:        parentID,
+		Reason:          reason,
+		SimilarityScore: score,
+	}
+
+	if err := u.DuplicateReportRepository.Create(db, entry); err != nil {
+		u.Log.Warnf("Failed to create duplicate_reports entry: %+v", err)
+		return err
+	}
+
+	return nil
+}
+
+// proximityScore converts a geodesic distance (meters) into a 0..1 similarity
+// score: ~0.99 at 0m decaying to ~0.5 at the 100m radius boundary.
+func (u *DuplicateUseCase) proximityScore(lat1, lng1, lat2, lng2 float64) float64 {
+	const earthRadiusMeters = 6371000.0
+
+	toRad := func(deg float64) float64 { return deg * math.Pi / 180.0 }
+
+	dLat := toRad(lat2 - lat1)
+	dLng := toRad(lng2 - lng1)
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(toRad(lat1))*math.Cos(toRad(lat2))*math.Sin(dLng/2)*math.Sin(dLng/2)
+	dist := 2 * earthRadiusMeters * math.Asin(math.Sqrt(a))
+
+	if dist > 100.0 {
+		dist = 100.0
+	}
+	return 1.0 - (dist / 100.0 * 0.5)
+}
+
+// primaryPhotoHash returns the perceptual hash of the report's primary photo,
+// computing and persisting it when missing. Returns (nil, nil) when the report
+// has no primary photo or the hash cannot be computed.
+func (u *DuplicateUseCase) primaryPhotoHash(db *gorm.DB, report *entity.Report) (*goimagehash.ImageHash, *entity.ReportPhoto) {
 	var currentPhoto *entity.ReportPhoto
 
 	for i := range report.Photos {
@@ -81,139 +193,26 @@ func (u *DuplicateUseCase) CheckDuplicate(ctx context.Context, reportID string) 
 		}
 	}
 
-	if currentPhoto != nil {
-		h, err := u.getOrComputePHash(db, currentPhoto)
-		if err != nil {
-			u.Log.Warnf("Failed to compute pHash for report %s photo: %+v", reportID, err)
-		} else {
-			currentHash = h
-		}
+	if currentPhoto == nil {
+		return nil, nil
 	}
 
-	// 2. Coarse Filter: Find candidates within 100 meters, same category, 7 days window
-	since := time.Now().Add(-7 * 24 * time.Hour)
-	if report.FirstReportedAt != nil {
-		since = report.FirstReportedAt.Add(-7 * 24 * time.Hour)
-	}
-
-	candidates, err := u.ReportRepository.FindNearbyByCategory(
-		db,
-		report.Latitude,
-		report.Longitude,
-		100.0, // 100 meters radius
-		report.CategoryID,
-		report.ID,
-		since,
-	)
+	h, err := u.getOrComputePHash(db, currentPhoto)
 	if err != nil {
-		u.Log.Warnf("Failed to find nearby candidates for report %s: %+v", reportID, err)
-		return err
+		u.Log.Warnf("Failed to compute pHash for report %s photo: %+v", report.ID, err)
+		return nil, nil
 	}
+	return h, currentPhoto
+}
 
-	if len(candidates) == 0 {
-		u.Log.Infof("No nearby candidates found for report %s", reportID)
-		return nil
-	}
-
-	u.Log.Infof("Found %d coarse candidates for report %s", len(candidates), reportID)
-
-	// 3. Fine Filter & Evaluation
-	var matchedParentID string
-	var matchReason string
-	var matchScore float64
-
-	var llmCandidates []entity.Report
-
-	for _, cand := range candidates {
-		var candPhoto *entity.ReportPhoto
-		for i := range cand.Photos {
-			if cand.Photos[i].IsPrimary {
-				candPhoto = &cand.Photos[i]
-				break
-			}
-		}
-
-		if currentHash != nil && candPhoto != nil {
-			candHash, err := u.getOrComputePHash(db, candPhoto)
-			if err == nil && candHash != nil {
-				dist, err := currentHash.Distance(candHash)
-				if err == nil {
-					u.Log.Infof("pHash distance between %s and candidate %s: %d", report.ID, cand.ID, dist)
-					if dist <= 5 {
-						matchedParentID = cand.ID
-						matchReason = "identical_photo"
-						matchScore = 1.0 - (float64(dist) / 64.0)
-						break
-					} else if dist > 15 {
-						// Photos are clearly different, skip this candidate
-						continue
-					}
-				}
-			}
-		}
-
-		// Keep candidate for LLM / location-based evaluation
-		llmCandidates = append(llmCandidates, cand)
-	}
-
-	// 4. LLM Semantic Evaluation if no exact photo match found yet
-	if matchedParentID == "" && len(llmCandidates) > 0 && u.Genai != nil {
-		llmMatch, err := u.evaluateWithLLM(ctx, report, llmCandidates)
-		if err != nil {
-			u.Log.Warnf("LLM duplicate evaluation failed for report %s: %+v", reportID, err)
-		} else if llmMatch != nil && llmMatch.IsDuplicate && llmMatch.MatchedReportID != "" {
-			matchedParentID = llmMatch.MatchedReportID
-			matchReason = "similar_location"
-			if llmMatch.Reason != "" {
-				matchReason = llmMatch.Reason
-			}
-			matchScore = llmMatch.Confidence
-			if matchScore <= 0 {
-				matchScore = 0.85
-			}
+// photoHashFor returns the primary photo hash of an arbitrary report.
+func (u *DuplicateUseCase) photoHashFor(db *gorm.DB, report *entity.Report) (*goimagehash.ImageHash, error) {
+	for i := range report.Photos {
+		if report.Photos[i].IsPrimary {
+			return u.getOrComputePHash(db, &report.Photos[i])
 		}
 	}
-
-	// 5. Fallback: If LLM unavailable/skipped and candidates exist, do NOT auto-merge
-	// without evidence. Log and skip to avoid incorrectly merging distinct reports.
-	if matchedParentID == "" && len(llmCandidates) > 0 {
-		u.Log.Infof("No confident duplicate match for report %s — %d candidates exist but no photo/LLM evidence, skipping merge", reportID, len(llmCandidates))
-	}
-
-	// 6. Execute Merge if match found
-	if matchedParentID != "" {
-		u.Log.Infof("Report %s matched as duplicate of parent %s (reason: %s, score: %.2f)", reportID, matchedParentID, matchReason, matchScore)
-
-		tx := u.DB.WithContext(ctx).Begin()
-		defer tx.Rollback()
-
-		if err := u.ReportRepository.SetMergedInto(tx, reportID, matchedParentID); err != nil {
-			u.Log.Warnf("Failed to set merged_into_id for report %s: %+v", reportID, err)
-			return err
-		}
-
-		dupEntry := &entity.DuplicateReport{
-			ID:              uuid.NewString(),
-			ReportID:        reportID,
-			ParentID:        matchedParentID,
-			Reason:          matchReason,
-			SimilarityScore: matchScore,
-		}
-
-		if err := u.DuplicateReportRepository.Create(tx, dupEntry); err != nil {
-			u.Log.Warnf("Failed to create duplicate_reports entry: %+v", err)
-			return err
-		}
-
-		if err := tx.Commit().Error; err != nil {
-			u.Log.Warnf("Failed commit duplicate merge transaction for report %s: %+v", reportID, err)
-			return err
-		}
-
-		u.Log.Infof("Successfully merged report %s into parent %s", reportID, matchedParentID)
-	}
-
-	return nil
+	return nil, fmt.Errorf("report %s has no primary photo", report.ID)
 }
 
 func (u *DuplicateUseCase) getOrComputePHash(db *gorm.DB, photo *entity.ReportPhoto) (*goimagehash.ImageHash, error) {
@@ -250,105 +249,4 @@ func (u *DuplicateUseCase) getOrComputePHash(db *gorm.DB, photo *entity.ReportPh
 	_ = db.Model(&entity.ReportPhoto{}).Where("id = ?", photo.ID).Update("perceptual_hash", hashHex).Error
 
 	return hash, nil
-}
-
-func (u *DuplicateUseCase) evaluateWithLLM(ctx context.Context, newReport *entity.Report, candidates []entity.Report) (*llmDuplicateResult, error) {
-	model := u.Genai.GenerativeModel("gemini-3.5-flash")
-	model.ResponseSchema = &genai.Schema{
-		Type: genai.TypeObject,
-		Properties: map[string]*genai.Schema{
-			"is_duplicate": {
-				Type:        genai.TypeBoolean,
-				Description: "Apakah laporan baru mendeskripsikan masalah infrastruktur yang sama dengan salah satu laporan kandidat.",
-			},
-			"matched_report_id": {
-				Type:        genai.TypeString,
-				Description: "ID laporan kandidat yang cocok. Kosongkan jika is_duplicate false.",
-			},
-			"reason": {
-				Type:        genai.TypeString,
-				Description: "Alasan pencocokan: identical_photo, similar_location, atau same_incident.",
-			},
-			"confidence": {
-				Type:        genai.TypeNumber,
-				Description: "Skor keyakinan pencocokan antara 0.0 hingga 1.0.",
-			},
-		},
-		Required: []string{"is_duplicate", "matched_report_id", "reason", "confidence"},
-	}
-	model.ResponseMIMEType = "application/json"
-
-	newDesc := ""
-	if newReport.Description != nil {
-		newDesc = *newReport.Description
-	}
-	newAddr := ""
-	if newReport.Address != nil {
-		newAddr = *newReport.Address
-	}
-
-	candListJSON := []map[string]string{}
-	for _, c := range candidates {
-		desc := ""
-		if c.Description != nil {
-			desc = *c.Description
-		}
-		addr := ""
-		if c.Address != nil {
-			addr = *c.Address
-		}
-		candListJSON = append(candListJSON, map[string]string{
-			"id":          c.ID,
-			"title":       c.Title,
-			"description": desc,
-			"address":     addr,
-			"severity":    c.Severity,
-			"source_type": c.SourceType,
-		})
-	}
-
-	candBytes, _ := json.Marshal(candListJSON)
-
-	prompt := fmt.Sprintf(`Tugas kamu adalah mengevaluasi apakah laporan baru merupakan DUPLIKAT dari salah satu laporan kandidat yang berada di lokasi dan waktu berdekatan.
-
-Laporan Baru:
-ID: %s
-Judul: %s
-Deskripsi: %s
-Alamat: %s
-Sumber: %s
-
-Daftar Laporan Kandidat:
-%s
-
-Panduan:
-1. Bandingkan judul, deskripsi, dan alamat. Jika mereka merujuk pada kerusakan/insiden infrastruktur spesifik yang sama, set is_duplicate = true dan matched_report_id = ID kandidat.
-2. Jika semua kandidat berbeda masalah/lokasi spesifiknya, set is_duplicate = false dan matched_report_id = "".
-3. Balas JSON sesuai schema.`, newReport.ID, newReport.Title, newDesc, newAddr, newReport.SourceType, string(candBytes))
-
-	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
-	if err != nil {
-		return nil, err
-	}
-
-	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
-		return nil, fmt.Errorf("empty response from Gemini")
-	}
-
-	part := resp.Candidates[0].Content.Parts[0]
-	text, ok := part.(genai.Text)
-	if !ok {
-		return nil, fmt.Errorf("unexpected LLM response format")
-	}
-
-	jsonStr := strings.TrimPrefix(string(text), "```json\n")
-	jsonStr = strings.TrimSuffix(jsonStr, "\n```")
-	jsonStr = strings.TrimSpace(jsonStr)
-
-	var res llmDuplicateResult
-	if err := json.Unmarshal([]byte(jsonStr), &res); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal LLM response: %w", err)
-	}
-
-	return &res, nil
 }

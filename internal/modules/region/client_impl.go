@@ -35,6 +35,7 @@ func (c *clientImpl) ResolveVillageByAddress(tx *gorm.DB, villageName, districtN
 		response.DistrictName = village.District.Name
 		if village.District.City != nil {
 			response.CityName = village.District.City.Name
+			response.CityCode = village.District.City.Code
 			if village.District.City.Province != nil {
 				response.ProvinceName = village.District.City.Province.Name
 			}

@@ -21,17 +21,18 @@ import (
 )
 
 type ReportUseCase struct {
-	DB                 *gorm.DB
-	Log                *logrus.Logger
-	Validate           *validator.Validate
-	ReportRepository   *repository.ReportRepository
-	ReporterRepository *repository.ReporterRepository
-	ReportPhotoRepo    *repository.ReportPhotoRepository
-	ReportClient       report_client.Client
-	RegionClient       region_client.Client
-	NominatimClient    client.NominatimClient
-	Cloudinary         *client.CloudinaryClient
-	VerificationClient verification_client.Client
+	DB                        *gorm.DB
+	Log                       *logrus.Logger
+	Validate                  *validator.Validate
+	ReportRepository          *repository.ReportRepository
+	ReporterRepository        *repository.ReporterRepository
+	ReportPhotoRepo           *repository.ReportPhotoRepository
+	DuplicateReportRepository *repository.DuplicateReportRepository
+	ReportClient              report_client.Client
+	RegionClient              region_client.Client
+	NominatimClient           client.NominatimClient
+	Cloudinary                *client.CloudinaryClient
+	VerificationClient        verification_client.Client
 }
 
 func NewReportUseCase(
@@ -41,22 +42,24 @@ func NewReportUseCase(
 	reportRepo *repository.ReportRepository,
 	reporterRepo *repository.ReporterRepository,
 	photoRepo *repository.ReportPhotoRepository,
+	duplicateRepo *repository.DuplicateReportRepository,
 	reportClient report_client.Client,
 	regionClient region_client.Client,
 	nominatimClient client.NominatimClient,
 	cloudinary *client.CloudinaryClient,
 ) *ReportUseCase {
 	return &ReportUseCase{
-		DB:                 db,
-		Log:                log,
-		Validate:           validate,
-		ReportRepository:   reportRepo,
-		ReporterRepository: reporterRepo,
-		ReportPhotoRepo:    photoRepo,
-		ReportClient:       reportClient,
-		RegionClient:       regionClient,
-		NominatimClient:    nominatimClient,
-		Cloudinary:         cloudinary,
+		DB:                        db,
+		Log:                       log,
+		Validate:                  validate,
+		ReportRepository:          reportRepo,
+		ReporterRepository:        reporterRepo,
+		ReportPhotoRepo:           photoRepo,
+		DuplicateReportRepository: duplicateRepo,
+		ReportClient:              reportClient,
+		RegionClient:              regionClient,
+		NominatimClient:           nominatimClient,
+		Cloudinary:                cloudinary,
 	}
 }
 
@@ -73,7 +76,80 @@ func (c *ReportUseCase) GetDetail(ctx context.Context, id string) (*model.Report
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Gagal mengambil data laporan")
 	}
 
-	return converter.ReportToDetailResponse(report), nil
+	resp := converter.ReportToDetailResponse(report)
+	resp.RelatedReports = c.collectRelatedReports(tx, report)
+	return resp, nil
+}
+
+// collectRelatedReports returns reports related to the given report, sourced
+// from two places:
+//  1. The merge cluster: merged children, the parent (if merged), and siblings.
+//  2. The similarity audit trail (duplicate_reports), read in both directions —
+//     reports this one duplicates, and reports that duplicate this one.
+//
+// Results are de-duplicated and exclude the report itself.
+func (c *ReportUseCase) collectRelatedReports(tx *gorm.DB, report *entity.Report) []model.ReportMapResponse {
+	seen := map[string]bool{report.ID: true}
+	var related []entity.Report
+	appendUnique := func(items []entity.Report) {
+		for _, item := range items {
+			if !seen[item.ID] {
+				seen[item.ID] = true
+				related = append(related, item)
+			}
+		}
+	}
+
+	// 1. Children merged into this report (this report is the parent).
+	if children, err := c.ReportRepository.FindMergedChildren(tx, report.ID); err == nil {
+		appendUnique(children)
+	} else {
+		c.Log.Warnf("Failed to load merged children for %s: %+v", report.ID, err)
+	}
+
+	// 1b. Reports merged into this report's own merged children (multi-level
+	// merge chains), so every child still exposes its subtree.
+	for _, child := range related {
+		if child.MergedIntoID != nil && *child.MergedIntoID == report.ID {
+			if grandChildren, err := c.ReportRepository.FindMergedChildren(tx, child.ID); err == nil {
+				appendUnique(grandChildren)
+			} else {
+				c.Log.Warnf("Failed to load grandchildren for %s: %+v", child.ID, err)
+			}
+		}
+	}
+
+	// 2. If this report is itself merged, include the parent and its other children.
+	if report.MergedIntoID != nil && *report.MergedIntoID != "" {
+		parent := new(entity.Report)
+		if err := c.ReportRepository.FindDetailByID(tx, parent, *report.MergedIntoID); err == nil {
+			appendUnique([]entity.Report{*parent})
+		} else {
+			c.Log.Warnf("Failed to load parent %s for %s: %+v", *report.MergedIntoID, report.ID, err)
+		}
+		if siblings, err := c.ReportRepository.FindMergedChildren(tx, *report.MergedIntoID); err == nil {
+			appendUnique(siblings)
+		}
+	}
+
+	// 3. Similarity audit trail, both directions (related without being merged).
+	if relatedIDs, err := c.DuplicateReportRepository.FindRelatedReportIDs(tx, report.ID); err == nil {
+		if relatedReports, err := c.ReportRepository.FindRelatedByIDs(tx, relatedIDs); err == nil {
+			appendUnique(relatedReports)
+		} else {
+			c.Log.Warnf("Failed to load related reports for %s: %+v", report.ID, err)
+		}
+	} else {
+		c.Log.Warnf("Failed to load related report IDs for %s: %+v", report.ID, err)
+	}
+
+	responses := make([]model.ReportMapResponse, 0, len(related))
+	for _, item := range related {
+		if resp := converter.ReportToMapResponse(&item); resp != nil {
+			responses = append(responses, *resp)
+		}
+	}
+	return responses
 }
 
 func (c *ReportUseCase) SearchMap(ctx context.Context, request *model.SearchReportMapRequest) ([]model.ReportMapResponse, error) {

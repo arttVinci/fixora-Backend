@@ -1,8 +1,6 @@
 package repository
 
 import (
-	"time"
-
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/entity"
 	"github.com/arttVinci/fixora-Backend/internal/modules/report/src/model"
 	shared_repo "github.com/arttVinci/fixora-Backend/internal/shared/repository"
@@ -121,20 +119,57 @@ func (r *ReportRepository) FilterList(request *model.SearchReportListRequest) fu
 	}
 }
 
-func (r *ReportRepository) FindNearbyByCategory(db *gorm.DB, lat, lng float64, radiusMeters float64, categoryID string, excludeID string, since time.Time) ([]entity.Report, error) {
+func (r *ReportRepository) FindMergedChildren(db *gorm.DB, parentID string) ([]entity.Report, error) {
 	var items []entity.Report
-	haversine := "(6371000 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude))))"
+	err := db.
+		Preload("Category").
+		Preload("Photos").
+		Where("merged_into_id = ?", parentID).
+		Find(&items).Error
+	if err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+// FindSameCategoryNearby returns non-merged reports of the same category within
+// radiusMeters of (lat, lng), excluding excludeID, ordered oldest-first. The
+// oldest-first order makes the merge parent deterministic when a merge happens
+// (always the earliest report in the cluster, independent of check order).
+func (r *ReportRepository) FindSameCategoryNearby(db *gorm.DB, lat, lng float64, radiusMeters float64, categoryID string, excludeID string) ([]entity.Report, error) {
+	var items []entity.Report
+	// Numerically stable haversine (ASIN form): the ACOS form returns NULL for
+	// identical coordinates because its argument can round above 1.0.
+	haversine := "(6371000 * 2 * ASIN(SQRT(POWER(SIN(RADIANS(latitude - ?) / 2), 2) + COS(RADIANS(?)) * COS(RADIANS(latitude)) * POWER(SIN(RADIANS(longitude - ?) / 2), 2))))"
 
 	err := db.
+		Preload("Category").
 		Preload("Photos").
 		Where("category_id = ?", categoryID).
 		Where("merged_into_id IS NULL").
 		Where("id != ?", excludeID).
-		Where("first_reported_at >= ?", since).
-		Where(haversine+" <= ?", lat, lng, lat, radiusMeters).
-		Limit(20).
+		Where(haversine+" <= ?", lat, lat, lng, radiusMeters).
+		Order("first_reported_at ASC, created_at ASC, id ASC").
+		Limit(50).
 		Find(&items).Error
+	if err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
+// FindRelatedByIDs loads the reports with the given IDs, with Category and
+// Photos preloaded for map rendering. Order is not guaranteed.
+func (r *ReportRepository) FindRelatedByIDs(db *gorm.DB, ids []string) ([]entity.Report, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var items []entity.Report
+	err := db.
+		Preload("Category").
+		Preload("Photos").
+		Where("id IN ?", ids).
+		Find(&items).Error
 	if err != nil {
 		return nil, err
 	}

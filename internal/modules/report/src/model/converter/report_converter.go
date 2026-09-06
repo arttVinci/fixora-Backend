@@ -24,15 +24,15 @@ func ReportToMapResponse(report *entity.Report) *model.ReportMapResponse {
 	}
 
 	return &model.ReportMapResponse{
-		ID:              report.ID,
-		Title:           report.Title,
-		Latitude:        report.Latitude,
-		Longitude:       report.Longitude,
-		Severity:        report.Severity,
-		CategorySlug:    categorySlug,
-		Status:          report.Status,
-		PhotoURL:        primaryPhoto,
-		Source:          report.SourceType,
+		ID:           report.ID,
+		Title:        report.Title,
+		Latitude:     report.Latitude,
+		Longitude:    report.Longitude,
+		Severity:     report.Severity,
+		CategorySlug: categorySlug,
+		Status:       report.Status,
+		PhotoURL:     primaryPhoto,
+		Source:       report.SourceType,
 	}
 }
 
@@ -77,6 +77,7 @@ func ReportToDetailResponse(report *entity.Report) *model.ReportDetailResponse {
 		AdditionalPhotos:   &additionalPhotos,
 		TotalConfirmations: totalConfirmations,
 		MergedIntoID:       report.MergedIntoID,
+		RelatedReports:     make([]model.ReportMapResponse, 0),
 		FirstReportedAt:    report.FirstReportedAt,
 		LastConfirmedAt:    report.LastConfirmedAt,
 	}

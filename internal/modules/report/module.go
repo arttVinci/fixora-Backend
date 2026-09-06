@@ -54,7 +54,7 @@ func New(
 	}
 	cleanupWorker := worker.NewStagingCleanupWorker(log, cloudinaryClient, time.Duration(ttlHours)*time.Hour)
 
-	analyzePhotoUseCase := usecase.NewAnalyzePhotoUseCase(db, log, validate, genaiClient, cloudinaryClient)
+	analyzePhotoUseCase := usecase.NewAnalyzePhotoUseCase(db, log, validate, genaiClient, cloudinaryClient, nominatimClient, categoryRepo)
 
 	duplicateUseCase := usecase.NewDuplicateUseCase(db, log, validate, reportRepo, duplicateRepo, genaiClient)
 
@@ -68,6 +68,7 @@ func New(
 	reportUseCase := usecase.NewReportUseCase(
 		db, log, validate,
 		reportRepo, reporterRepo, photoRepo,
+		duplicateRepo,
 		clientImpl,
 		regionClient,
 		nominatimClient,
