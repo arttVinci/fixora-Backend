@@ -28,7 +28,7 @@ func NewCategoryController(useCase *usecase.CategoryUseCase, logger *logrus.Logg
 // @Produce      json
 // @Success      200  {object}  dto.WebResponse[[]model.CategoryResponse]
 // @Failure      500  {object}  dto.WebResponse[any]
-// @Router       /api/v1/categories [get]
+// @Router       /categories [get]
 func (c *CategoryController) List(ctx *fiber.Ctx) error {
 	resp, err := c.UseCase.List(ctx.UserContext())
 	if err != nil {
