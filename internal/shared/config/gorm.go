@@ -39,11 +39,14 @@ func NewDatabase(viper *viper.Viper, log *logrus.Logger) *gorm.DB {
 	if portStr != "" {
 		port, _ = strconv.Atoi(portStr)
 	}
+
+	tls := viper.GetBool("database.tls")
+
 	idleConnection := viper.GetInt("database.pool.idle")
 	maxConnection := viper.GetInt("database.pool.max")
 	maxLifeTimeConnection := viper.GetInt("database.pool.lifetime")
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", username, password, host, port, databaseName)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local&tls=%s", username, password, host, port, databaseName, tls)
 
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		Logger: logger.New(&logrusWriter{Logger: log}, logger.Config{
