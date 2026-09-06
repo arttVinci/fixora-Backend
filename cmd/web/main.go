@@ -9,6 +9,8 @@ import (
 	"github.com/arttVinci/fixora-Backend/internal/modules/verification"
 	"github.com/arttVinci/fixora-Backend/internal/shared/config"
 	module "github.com/arttVinci/fixora-Backend/internal/shared/modules"
+
+	_ "github.com/arttVinci/fixora-Backend/docs"
 )
 
 // @title           Fixora Backend API
