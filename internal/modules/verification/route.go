@@ -20,8 +20,8 @@ func (m *Module) RegisterRoutes(router fiber.Router) {
 // @Accept json
 // @Produce json
 // @Param reportId path string true "Report ID"
-// @Success 200 {object} response.WebResponse[model.VerificationSessionResponse]
-// @Failure 400 {object} response.WebResponse[any]
+// @Success 200 {object} dto.WebResponse[any]
+// @Failure 400 {object} dto.WebResponse[any]
 // @Router /crawl/verify/trigger/{reportId} [post]
 func (m *Module) triggerVerification(ctx *fiber.Ctx) error {
 	resp, err := m.UseCase.CreateVerification(ctx.UserContext(), ctx.Params("reportId"))
@@ -38,8 +38,8 @@ func (m *Module) triggerVerification(ctx *fiber.Ctx) error {
 // @Accept json
 // @Produce json
 // @Param sessionId path string true "Session ID"
-// @Success 200 {object} response.WebResponse[model.VerificationSessionResponse]
-// @Failure 400 {object} response.WebResponse[any]
+// @Success 200 {object} dto.WebResponse[any]
+// @Failure 400 {object} dto.WebResponse[any]
 // @Router /crawl/verify/retry/{sessionId} [post]
 func (m *Module) retrySession(ctx *fiber.Ctx) error {
 	resp, err := m.UseCase.RetrySession(ctx.UserContext(), ctx.Params("sessionId"))
@@ -56,8 +56,8 @@ func (m *Module) retrySession(ctx *fiber.Ctx) error {
 // @Accept json
 // @Produce json
 // @Param reportId path string true "Report ID"
-// @Success 200 {object} response.WebResponse[[]model.VerificationSessionResponse]
-// @Failure 400 {object} response.WebResponse[any]
+// @Success 200 {object} dto.WebResponse[any]
+// @Failure 400 {object} dto.WebResponse[any]
 // @Router /crawl/verify/sessions/{reportId} [get]
 func (m *Module) getSessionsByReportID(ctx *fiber.Ctx) error {
 	resp, err := m.UseCase.GetSessionsByReportID(ctx.UserContext(), ctx.Params("reportId"))
