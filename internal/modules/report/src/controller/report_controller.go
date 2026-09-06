@@ -36,10 +36,10 @@ func NewReportController(useCase *usecase.ReportUseCase, analyzePhotoUseCase *us
 // @Param        status query string false "Status Filter"
 // @Param        severity query string false "Severity Filter"
 // @Param        source_type query string false "Source Type Filter"
-// @Success      200  {object}  response.WebResponse[[]model.ReportMapResponse]
-// @Failure      400  {object}  response.WebResponse[any]
-// @Failure      500  {object}  response.WebResponse[any]
-// @Router       /api/v1/reports/map [get]
+// @Success      200  {object}  dto.WebResponse[[]model.ReportMapResponse]
+// @Failure      400  {object}  dto.WebResponse[any]
+// @Failure      500  {object}  dto.WebResponse[any]
+// @Router       /reports/map [get]
 func (c *ReportController) SearchMap(ctx *fiber.Ctx) error {
 	request := new(model.SearchReportMapRequest)
 	if err := ctx.QueryParser(request); err != nil {
@@ -66,10 +66,10 @@ func (c *ReportController) SearchMap(ctx *fiber.Ctx) error {
 // @Accept       json
 // @Produce      json
 // @Param        id path string true "Report ID"
-// @Success      200  {object}  response.WebResponse[model.ReportDetailResponse]
-// @Failure      404  {object}  response.WebResponse[any]
-// @Failure      500  {object}  response.WebResponse[any]
-// @Router       /api/v1/reports/{id} [get]
+// @Success      200  {object}  dto.WebResponse[model.ReportDetailResponse]
+// @Failure      404  {object}  dto.WebResponse[any]
+// @Failure      500  {object}  dto.WebResponse[any]
+// @Router       /reports/{id} [get]
 func (c *ReportController) GetDetail(ctx *fiber.Ctx) error {
 	id := ctx.Params("id")
 
@@ -93,10 +93,10 @@ func (c *ReportController) GetDetail(ctx *fiber.Ctx) error {
 // @Accept       multipart/form-data
 // @Produce      json
 // @Param        photo formData file true "Problem photo"
-// @Success      200  {object}  response.WebResponse[*model.IssueAnalysisResultResponse]
-// @Failure      400  {object}  response.WebResponse[any]
-// @Failure      500  {object}  response.WebResponse[any]
-// @Router       /api/v1/reports/analyze-photo [post]
+// @Success      200  {object}  dto.WebResponse[model.IssueAnalysisResultResponse]
+// @Failure      400  {object}  dto.WebResponse[any]
+// @Failure      500  {object}  dto.WebResponse[any]
+// @Router       /reports/analyze-photo [post]
 func (c *ReportController) AnalyzePhoto(ctx *fiber.Ctx) error {
 	file, err := ctx.FormFile("photo")
 	if err != nil {
@@ -124,10 +124,10 @@ func (c *ReportController) AnalyzePhoto(ctx *fiber.Ctx) error {
 // @Accept       json
 // @Produce      json
 // @Param        request body model.CreateReportRequest true "Create report payload"
-// @Success      201  {object}  response.WebResponse[*model.ReportDetailResponse]
-// @Failure      400  {object}  response.WebResponse[any]
-// @Failure      500  {object}  response.WebResponse[any]
-// @Router       /api/v1/reports [post]
+// @Success      201  {object}  dto.WebResponse[model.ReportDetailResponse]
+// @Failure      400  {object}  dto.WebResponse[any]
+// @Failure      500  {object}  dto.WebResponse[any]
+// @Router       /reports [post]
 func (c *ReportController) Create(ctx *fiber.Ctx) error {
 	request := new(model.CreateReportRequest)
 	if err := ctx.BodyParser(request); err != nil {
