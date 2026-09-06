@@ -1,137 +1,130 @@
 # User Flow: Pelaporan Masalah Infrastruktur
 
-> Dokumen ini menjelaskan alur interaksi pengguna saat melaporkan masalah infrastruktur di Fixora.  
-> Pendekatan: **Conversational AI-Assisted** — pelaporan dipandu oleh Asisten AI, bukan form statis.
+> Dokumen ini menjelaskan alur pelaporan masalah infrastruktur oleh warga (sumber `user_report`).
+> Referensi: **US-02 (Pelaporan Manual)**, **US-06 (CV Classifier)** di PRD.
+> Source of truth: `internal/modules/report/src/usecase/analyze_photo_usecase.go`, `internal/modules/report/src/usecase/report_usecase.go`, `internal/modules/report/src/controller/report_controller.go`.
 
 ---
 
 ## Gambaran Umum
 
-Pelaporan di Fixora dirancang **minim hambatan (frictionless)**. User tidak langsung disodori form panjang — melainkan dipandu step-by-step oleh Asisten AI. Langkah pertama hanya upload foto, sisanya dibantu AI (klasifikasi kategori, deteksi lokasi). User tinggal review dan konfirmasi.
+Pelaporan di Fixora terdiri dari **dua langkah API terpisah**:
+
+1. **Analisis foto** (`POST /api/reports/analyze-photo`) — foto diunggah, disimpan ke staging Cloudinary, lalu dianalisis oleh AI (vision) untuk menghasilkan draft otomatis (title, deskripsi, kategori, severity, lokasi).
+2. **Submit laporan** (`POST /api/reports`) — frontend mengirim draft final (yang sudah direview/dikoreksi user) beserta `staging_session_id`, lalu backend mempromosikan foto staging ke folder permanen dan membuat record report.
+
+Tidak ada form panjang: foto + AI menghasilkan draft, user hanya review & koreksi sebelum submit.
 
 ---
 
-## Alur Lengkap
+## Langkah 1 — Upload & Analisis Foto (CV Classifier)
 
-### Fase 1 — Entry Point & Sambutan
-
-| Step | Aktor | Aksi |
-|------|-------|------|
-| 1 | User | Membuka aplikasi Fixora |
-| 2 | Asisten | Menyapa sesuai waktu: *"Selamat siang! Ada yang bisa saya bantu hari ini?"* |
-| 3 | User | Memilih salah satu opsi: |
-
-**Percabangan:**
-- **"Lihat Terkini"** → Diarahkan langsung ke Peta Besar (flow selesai)
-- **"Melapor"** → Lanjut ke Fase 2
-
----
-
-### Fase 2 — Upload Foto & Analisis AI
-
-| Step | Aktor | Aksi |
-|------|-------|------|
-| 4 | Asisten | Menjelaskan proses: *"Nanti foto Anda akan dianalisis AI, lokasi dideteksi otomatis, lalu diverifikasi sebelum tayang."* |
-| 5 | Asisten | *"Silakan masukkan foto masalahnya."* |
-| 6 | User | Upload foto masalah infrastruktur |
-| 7 | Sistem | **CV Classifier berjalan (US-06)** — foto dianalisis untuk menentukan kategori masalah dan tingkat keparahan (*severity scoring*) |
-| 8 | Asisten | Menampilkan hasil analisis dalam **form terstruktur**: Title, Deskripsi, Kategori, Tingkat Kerusakan (sudah terisi otomatis oleh AI) |
-
----
-
-### Fase 3 — Review & Edit Data
-
-| Step | Aktor | Aksi |
-|------|-------|------|
-| 9 | User | Mereview form hasil AI |
-| 10a | User | *(Jika ada yang salah)* → Edit field yang perlu dikoreksi via modal/form → kembali ke review |
-| 10b | User | *(Jika sudah oke)* → Konfirmasi data benar → lanjut ke Fase 4 |
-
-> **Human-in-the-loop**: AI memberikan draft, tapi keputusan akhir tetap di tangan user. Jika AI salah menebak kategori atau severity, user bisa mengoreksi.
-
----
-
-### Fase 4 — Deteksi & Verifikasi Lokasi
-
-| Step | Aktor | Aksi |
-|------|-------|------|
-| 11 | Sistem | Mengambil titik lokasi GPS *(sudah dicatat otomatis di background sejak awal, bukan diminta ke user baru di sini)* |
-| 12 | Asisten | *"Titik lokasi Anda saat ini di [alamat hasil deteksi]."* |
-| 13a | User | *(Jika lokasi meleset)* → Geser pin di peta interaktif → lokasi terkonfirmasi |
-| 13b | User | *(Jika sudah benar)* → Konfirmasi → lanjut ke Fase 5 |
-
-> **Kenapa GPS diambil di background?** Supaya user tidak perlu memikirkan lokasi di awal — fokus upload foto dulu. GPS sudah berjalan diam-diam sejak user membuka halaman pelaporan.
-
----
-
-### Fase 5 — Identitas Pelapor (Opsional)
-
-| Step | Aktor | Aksi |
-|------|-------|------|
-| 14 | Sistem | Multi-Agent Verification (MVP-simple) — Agent Verifier melakukan pengecekan ringan terhadap foto + lokasi sebelum tayang publik |
-| 15 | Asisten | *"Apakah Anda ingin mengisi email untuk konfirmasi & update laporan ini? (opsional)"* |
-| 16a | User | *(Isi email)* → Email tersimpan ke tabel `reporters`, `reporter_id` terhubung ke laporan |
-| 16b | User | *(Skip)* → `reporter_id` tetap `NULL`, laporan tetap anonim |
-| 17 | User | Konfirmasi submit laporan |
-
-> **Tanpa login, tanpa registrasi.** Pelapor tidak perlu membuat akun. Email bersifat opsional — hanya untuk yang ingin dapat notifikasi update status perbaikan di kemudian hari.
-
----
-
-### Fase 6 — Submit & Konfirmasi
-
-| Step | Aktor | Aksi |
-|------|-------|------|
-| 18 | Sistem | `POST` laporan ke server → status awal: `pending_verification` |
-| 19 | Asisten | *"Terima kasih atas laporan Anda! [apresiasi]"* |
-| 20 | Sistem | *(Jika email diisi)* → Kirim email apresiasi + info bahwa user akan mendapat update laporan |
-| 21 | Asisten | Mengirim link: *"Lihat detail laporan Anda di sini: [link]"* |
-| 22 | Sistem | Laporan tayang di peta publik **setelah lolos verifikasi** |
-
----
-
-### Fase 7 — Background: RAG Cross-Reference Anggaran (Async)
-
-> **Penting:** Fase ini **tidak terlihat oleh user** dan **tidak menghalangi chat flow**. Proses ini berjalan secara asinkron di background setelah laporan tersimpan ke database. RAG ini adalah pipeline terpisah dari flow chat (News Crawler + CV Classifier + Multi-Agent), dan dibangun secara paralel sebagai fitur tersendiri.
-
-**Kenapa RAG bukan bagian dari chat flow?**
-- Memanggil LLM untuk RAG (retrieval + synthesis) makan waktu — memaksa user menunggu hanya untuk submit laporan itu tidak masuk akal.
-- Hasil RAG bukan sesuatu yang perlu dikonfirmasi user (berbeda dengan CV Classifier yang butuh human-in-the-loop).
-- Hasil RAG adalah informasi tambahan yang ditampilkan nanti saat siapa pun membuka detail laporan di peta.
-
-**Alur background:**
+**Endpoint:** `POST /api/reports/analyze-photo` (multipart/form-data, field `photo`)
 
 | Step | Proses | Detail |
 |------|--------|--------|
-| BG-1 | Trigger otomatis | Setelah laporan tersimpan ke DB, sistem men-trigger `CrossReferenceBudget(reportID)` secara async |
-| BG-2 | Retrieval | Query ke Qdrant (vector DB) untuk mencari data anggaran pemerintah yang relevan dengan lokasi dan kategori laporan |
-| BG-3 | LLM Synthesis | Kandidat hasil retrieval di-synthesize oleh LLM menjadi ringkasan |
-| BG-4 | Simpan hasil | Hasil disimpan ke `reports.budget_info` — jika ada kandidat relevan, diisi ringkasan; jika tidak ada, diisi *"Tidak ditemukan data anggaran terkait"* |
+| 1 | Upload foto | User mengunggah satu file foto (jpg/png) |
+| 2 | Staging | Foto di-upload ke Cloudinary folder staging dengan public ID deterministik berdasarkan `session_id` (UUID baru) |
+| 3 | Analisis AI | Foto dikirim ke Gemini vision (`gemini-3.5-flash-lite`) dengan JSON schema |
+| 4 | Hasil draft | AI mengembalikan `title`, `description`, `category` (slug), `severity`, `location`, `reason`, `has_timestamp_overlay` |
 
-**Kapan user melihat hasilnya?**
+**Penjaga validitas (guard, dieksekusi backend secara berurutan):**
 
-Saat **siapa pun** (pelapor, pemantau, jurnalis) membuka detail laporan di peta, panel detail akan menampilkan:
-- Info Anggaran: *[hasil RAG]* — jika ditemukan data relevan
-- *"Tidak ditemukan data anggaran terkait"* — jika tidak ada kecocokan
+| Guard | Syarat | Jika gagal |
+|-------|--------|-----------|
+| Guard 0 — stempel kamera | Foto **wajib** punya overlay teks tanggal+waktu ter-burn di gambar (dari aplikasi kamera timestamp/CCTV/dashcam) | `is_relevant: false`, reason `"bukan foto timestamp camera (tidak ada stempel tanggal & waktu)"` |
+| Guard 1 — relevansi | Foto harus menunjukkan kerusakan infrastruktur publik nyata & masuk salah satu dari 4 kategori | `is_relevant: false` |
+| Guard 2 — kategori terdaftar | Slug kategori harus terdaftar di `categories` | `is_relevant: false`, reason `"kategori tidak dikenali"` |
+| Guard 3 — lokasi terbaca | Harus ada teks lokasi/koordinat tercetak di foto | `is_relevant: false`, reason `"lokasi tidak terbaca"` |
+| Guard 4 — geocoding | Teks lokasi di-geocode via Nominatim menjadi `lat/lng` | `is_relevant: false`, reason `"lokasi tidak dapat diidentifikasi"` |
+
+**Response (selalu HTTP 200, walau tidak relevan):**
+
+```json
+{
+  "data": {
+    "session_id": "<uuid>",
+    "photo_url": "<url staging>",
+    "title": "...",
+    "description": "...",
+    "category": "jalan-rusak",
+    "severity": "sedang",
+    "location": "...",
+    "latitude": -6.2,
+    "longitude": 106.8,
+    "address": "...",
+    "reason": "",
+    "is_relevant": true
+  }
+}
+```
+
+> Jika `is_relevant: false`, field `category`, `severity`, `location` kosong dan `reason` berisi alasan penolakan. Frontend **wajib memblokir submit** ketika `is_relevant: false`.
+
+---
+
+## Langkah 2 — Review & Submit Laporan
+
+**Endpoint:** `POST /api/reports` (application/json)
+
+| Step | Proses | Detail |
+|------|--------|--------|
+| 5 | Review draft | User mereview/mengoreksi field hasil AI (title, deskripsi, kategori, severity, lokasi) |
+| 6 | Submit | Frontend mengirim body JSON berisi field final + `staging_session_id` |
+| 7 | Reverse geocoding | Backend meng-geocode `latitude`/`longitude` via Nominatim untuk mendapatkan komponen wilayah + alamat |
+| 8 | Resolve village | Komponen wilayah di-resolve ke `village_id` via `region-client`. Gagal → 400 "Lokasi tidak teridentifikasi" |
+| 9 | Promote foto | Foto staging dipindah ke folder permanen Cloudinary (satu rename, tanpa re-upload) |
+| 10 | Simpan reporter | Jika `reporter_email` diisi: cari/create `reporters` berdasarkan email |
+| 11 | Simpan report | Buat record `reports` dengan `status: pending_verification`, `source_type: user_report` |
+| 12 | Simpan foto | Buat record `report_photos` (primary) |
+| 13 | Trigger async | Setelah commit: trigger `CheckDuplicate` (deteksi duplikat) + `CreateVerification` (multi-agent) |
+
+**Request body:**
+
+| Field | Tipe | Wajib | Keterangan |
+|-------|------|-------|-----------|
+| `category_id` | string | Ya | UUID kategori |
+| `title` | string | Ya | Maks 200 karakter |
+| `description` | string | Tidak | |
+| `latitude` | float | Ya | -90..90 |
+| `longitude` | float | Ya | -180..180 |
+| `address` | string | Tidak | **Diabaikan backend** — alamat di-override hasil Nominatim |
+| `severity` | string | Ya | `ringan` / `sedang` / `parah` |
+| `staging_session_id` | string | Ya | UUID dari endpoint `analyze-photo` |
+| `reporter_email` | string | Tidak | Email pelapor (opsional) |
+
+---
+
+## Langkah 3 — Verifikasi & Penayangan
+
+| Step | Proses | Detail |
+|------|--------|--------|
+| 14 | Verifikasi | Multi-agent verification (advocate/skeptic/manager) berjalan di background (cron tiap 30 detik) |
+| 15 | Status | `verified` jika lolos, `rejected` (+ `reject_reason`) jika ditolak |
+| 16 | Tayang | Report tayang di peta publik setelah `status: verified` |
+
+> **Catatan penting:** status awal laporan warga adalah `pending_verification`. Hanya `user_report` yang melewati verifikasi multi-agent — `ai_news` dan `gov_data` langsung `verified` (lihat `verification_usecase.go`).
 
 ---
 
 ## Ringkasan Mapping ke Backend
 
-| Fase | Endpoint / Proses Backend | Tabel Terkait |
-|------|---------------------------|---------------|
-| Fase 2 (CV Classifier) | `POST /api/v1/reports/analyze-photo` | — (stateless, return JSON) |
-| Fase 4 (Reverse Geocoding) | Internal call ke Nominatim | `villages`, `districts`, `cities`, `provinces` |
-| Fase 5 (Simpan Reporter) | Bagian dari `POST /api/v1/reports` | `reporters` |
-| Fase 6 (Submit Laporan) | `POST /api/v1/reports` | `reports`, `report_photos`, `reporters` |
-| Fase 6 (Kirim Email) | Background job / queue | — |
-| Post-submit (Verifikasi) | Internal / cron | `reports` (update status) |
-| Fase 7 (RAG Anggaran) | Background async trigger | `reports` (update `budget_info`), `budget_items` (source data) |
+| Langkah | Endpoint / Proses | Tabel Terkait |
+|---------|-------------------|---------------|
+| Analisis foto | `POST /api/reports/analyze-photo` → `AnalyzePhotoUseCase` | — (foto di Cloudinary staging) |
+| Reverse geocoding | Nominatim (shared client) | — |
+| Resolve village | `region-client.ResolveVillageByAddress` | `villages`, `districts`, `cities`, `provinces` |
+| Submit laporan | `POST /api/reports` → `ReportUseCase.CreateReport` | `reporters`, `reports`, `report_photos` |
+| Duplikat | `DuplicateUseCase.CheckDuplicate` (async) | `reports`, `report_photos`, `duplicate_reports` |
+| Verifikasi | `VerificationUseCase` (async, cron) | `verification_sessions`, `verification_logs`, `reports` |
 
 ---
 
 ## Catatan Desain
 
-- Flow chat (Fase 1–6) adalah pipeline yang **user lihat dan interaksi langsung**. Selesai di step 22.
-- Fase 7 (RAG) adalah pipeline **terpisah yang jalan di background** — user tidak melihat prosesnya, hanya melihat hasilnya nanti di detail laporan.
-- Flow ini selaras dengan **US-02 (Pelaporan Manual)**, **US-04 (Konfirmasi Status)**, **US-06 (CV Classifier)**, dan **US-08 (Cross-Reference Anggaran)** di PRD.
+- **Dua langkah, bukan chat.** Codebase tidak mengimplementasikan "asisten AI percakapan" — hanya dua endpoint stateless: analisis foto lalu submit.
+- **Foto wajib punya stempel timestamp kamera.** Ini penjaga utama anti-manipulasi (foto lama/screenshot ditolak).
+- **Alamat dari reverse geocode.** Field `address` pada request di-override oleh hasil Nominatim (`reverseResult.FullAddress`).
+- **Tanpa login.** Pelapor tidak perlu registrasi; `reporter_email` opsional dan hanya untuk follow-up internal.
+- **Tidak ada pengiriman email** di codebase saat ini.
+- **Tidak ada pipeline RAG** di codebase (lihat `SYSTEM-FLOW-GOV-SYNC.md` untuk status fitur anggaran).

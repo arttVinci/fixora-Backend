@@ -134,7 +134,7 @@ Cron job jalan berkala → Tarik berita dari RSS/NewsAPI
 
 > Sebagai pengguna, saya ingin melihat peta dengan marker per kategori masalah, agar saya bisa cepat mengenali jenis dan lokasi masalah di sekitar saya.
 
-- Marker dengan warna/icon berbeda per kategori (jalan, jembatan, sampah, bangunan, drainase)
+- Marker dengan warna/icon berbeda per kategori (jalan, jembatan, sampah, bangunan terbengkalai)
 - Marker clustering saat zoom out
 - Filter by kategori, durasi mangkrak, wilayah
 
@@ -153,7 +153,7 @@ Cron job jalan berkala → Tarik berita dari RSS/NewsAPI
 - Foto, lokasi, deskripsi
 - Tanggal pertama dilaporkan/terdeteksi
 - Tanggal terakhir dikonfirmasi masih bermasalah
-- Status: Mangkrak / Dalam Perbaikan / Selesai
+- Status: `pending_verification` / `verified` / `rejected`
 - Badge sumber data: "Laporan Warga" atau "Terdeteksi AI (Media)"
 
 **US-04 — Konfirmasi Status ("Masih Begini")**
@@ -171,14 +171,14 @@ Cron job jalan berkala → Tarik berita dari RSS/NewsAPI
 
 - Cron job berjalan tiap beberapa jam
 - Ekstraksi lokasi, kategori, dan severity dari teks berita via LLM (structured output/JSON mode)
-- Entry baru otomatis masuk sebagai "AI-sourced", menunggu validasi ringan sebelum tayang
+- Entry baru otomatis masuk sebagai `ai_news` dengan status `verified` (langsung tayang, tanpa menunggu validasi manual)
 
 **US-06 — Computer Vision Classifier & Severity Scoring**
 
 > Sebagai sistem, saya ingin otomatis mengklasifikasi kategori masalah dan tingkat keparahannya dari foto yang diupload, agar warga tidak perlu memilih kategori secara manual.
 
 - Menggunakan multimodal LLM (vision) untuk klasifikasi kategori + skor keparahan
-- Fallback: jika confidence rendah, kategori masuk status "perlu review manual"
+- Validasi berlapis: wajib ada stempel timestamp kamera + lokasi terbaca + kategori terdaftar; jika tidak memenuhi, foto ditolak (`is_relevant: false`)
 
 **US-07 — Auto-Flagging Duplikat/Mencurigakan**
 
@@ -190,12 +190,12 @@ Cron job jalan berkala → Tarik berita dari RSS/NewsAPI
 
 ### 5.3 Fitur Lanjutan (Fase 2+, referensi — lihat Out of Scope)
 
-- Multi-agent verification (Classifier vs Verifier)
 - RAG cross-reference data anggaran pemerintah (SatuData Jakarta atau sumber terbuka sejenis)
 - Predictive risk scoring
 - Agentic workflow otomatis (generate surat pengaduan)
 - Satellite imagery change detection
 
+> **Catatan:** Multi-agent verification (advocate/skeptic/manager) **sudah diimplementasikan** di codebase (modul `verification`) dan tidak lagi masuk Fase 2.
 ---
 
 ## 6. Metrik Kesuksesan (Success Metrics)
@@ -220,7 +220,7 @@ _Catatan: angka target di atas adalah baseline awal dan dapat disesuaikan setela
 
 Fitur/ide berikut **tidak** akan dikerjakan pada fase rilis MVP, untuk mencegah scope creep:
 
-1. **Multi-Agent Verification kompleks** (lebih dari 2 agent, sistem debate/consensus) — MVP hanya menggunakan 1 lapis klasifikasi + validasi dasar (bukan multi-agent penuh)
+1. ~~**Multi-Agent Verification kompleks** (lebih dari 2 agent, sistem debate/consensus)~~ — **sudah diimplementasikan** di modul `verification` (3 agent: advocate/skeptic/manager). Tidak lagi out of scope.
 2. **RAG cross-reference data anggaran pemerintah (SatuData Jakarta atau sumber terbuka sejenis)** — membutuhkan effort besar untuk data cleaning; ditunda ke Fase 2 setelah fondasi platform stabil. _Catatan: pengambilan raw data anggaran pemerintah (open government data) bisa dimulai lebih awal sebagai referensi manual/statis, namun pipeline RAG penuh (chunking, embedding, vector DB, retrieval otomatis) tetap masuk Fase 2, bukan MVP._
 3. **Predictive Risk Scoring (forecasting ML)** — membutuhkan dataset historis yang belum tersedia; ditunda ke Fase 3
 4. **Satellite/Aerial Imagery Analysis** — kompleksitas & kebutuhan expertise GIS terlalu tinggi untuk MVP; bersifat opsional jangka panjang
@@ -242,7 +242,7 @@ Fitur/ide berikut **tidak** akan dikerjakan pada fase rilis MVP, untuk mencegah 
 | ------------------ | ---------------------------------------------------------------------------------- |
 | Backend            | Go (Fiber, GORM, Logrus, Viper, Validator) — Clean Architecture / Modular Monolith |
 | Frontend           | React + TypeScript (Hooks, Service Layer, Axios config, API Error Handler)         |
-| Database           | PostgreSQL                                                                         |
+| Database           | MySQL 8.0 (driver `gorm.io/driver/mysql`)                                           |
 | AI/LLM             | Multimodal LLM API (klasifikasi foto + ekstraksi berita)                           |
 | Peta               | Leaflet.js / Mapbox + OpenStreetMap                                                |
 | Infrastruktur Repo | 2 repository terpisah: `fixora-be` & `fixora-fe`                                   |

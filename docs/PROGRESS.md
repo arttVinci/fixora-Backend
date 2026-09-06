@@ -1,154 +1,115 @@
 # Fixora — Progress & Roadmap
 
-> **Dokumen ini mencatat step-by-step pengerjaan backend Fixora.**  
-> **Status:** In Progress  
-> **Branch strategy:** Setiap step dikerjakan di branch terpisah
+> **Dokumen ini mencatat status pengerjaan backend Fixora dibandingkan codebase aktual.**
+> **Status:** In Progress
+> **Branch strategy:** setiap aktivitas dikerjakan di branch terpisah (`feature/*`)
+> **Source of truth:** codebase di `internal/modules/`, `cmd/web/main.go`, `internal/shared/`.
 
 ---
 
-## Step 1: Foundation — Database Models & Migration
+## Ringkasan Status
 
-**Branch:** `feat/database-models`
-
-**Tujuan:** Setup semua GORM model sesuai DATABASE-SCHEMA.md dan jalankan auto-migrate.
-
-- [ ] Buat GORM model: `Province`, `City`, `District`, `Village`
-- [ ] Buat GORM model: `Category`
-- [ ] Buat GORM model: `Report` (village_id NOT NULL)
-- [ ] Buat GORM model: `ReportPhoto`
-- [ ] Buat GORM model: `CrawledArticle`
-- [ ] Pastikan semua relasi (FK, ON DELETE CASCADE) terdefinisi dengan benar
-- [ ] Auto-migrate semua model saat aplikasi start
-- [ ] Test: jalankan aplikasi, pastikan tabel terbuat di MySQL
-
-**Catatan:** `village_id` di `reports` wajib NOT NULL — report tanpa village_id yang valid harus ditolak (rejected).
-
----
-
-## Step 2: Seed Data — Wilayah Jakarta & Kategori
-
-**Branch:** `feat/seed-data`
-
-**Tujuan:** Isi tabel wilayah (DKI Jakarta) dan kategori awal agar modul lain punya data referensi.
-
-- [ ] Seed wilayah DKI Jakarta dari data wilayah.id (1 provinsi, 6 kota, ~44 kecamatan, ~267 kelurahan)
-- [ ] Seed 5 kategori awal:
-  - Jalan Rusak
-  - Jembatan Rusak
-  - Sampah Menumpuk
-  - Bangunan Terbengkalai
-  - Drainase Tersumbat
-- [ ] Buat mekanisme seed yang idempotent (bisa dijalankan berulang tanpa duplikat)
-- [ ] Test: query tabel provinces/cities/districts/villages, pastikan data lengkap
+| Modul | Status | Keterangan |
+|-------|--------|-----------|
+| Foundation (model & migration) | ✅ Selesai | MySQL 8.0 via GORM `AutoMigrate` |
+| Seed wilayah | ✅ Selesai | Seluruh Indonesia (37 provinsi) |
+| Seed kategori | ✅ Selesai | 4 kategori |
+| Region module | ⚠️ Sebagian | Migration + seeder + resolve client selesai; **REST endpoint kosong** |
+| Category module | ✅ Selesai | `GET /api/categories` |
+| Report module | ✅ Selesai | Create + map + detail + analyze-photo |
+| News crawler | ✅ Selesai | Cron 2 jam + trigger manual |
+| CV classifier | ✅ Selesai | Bagian dari `analyze-photo` |
+| Duplicate detection | ✅ Selesai | Perceptual hash + radius + soft-merge |
+| Multi-agent verification | ✅ Selesai | 3 agent (advocate/skeptic/manager) |
+| Konfirmasi "masih begini" | ⚠️ Sebagian | Tabel + repository ada; **endpoint belum ada** |
+| Gov data sync | ❌ Belum | Belum ada modul (lihat `SYSTEM-FLOW-GOV-SYNC.md`) |
+| RAG cross-reference anggaran | ❌ Belum | Fase 2, belum ada pipeline |
 
 ---
 
-## Step 3: Region Module — API Wilayah
+## Yang Sudah Selesai
 
-**Branch:** `feat/region-module`
+### 1. Foundation — Database Models & Migration
 
-**Tujuan:** Endpoint API untuk frontend bisa fetch data wilayah (untuk filter dropdown, search, dll).
+- Entity GORM: `Province`, `City`, `District`, `Village` (region), `Category`, `Report`, `ReportPhoto`, `Reporter`, `ReportConfirmation`, `DuplicateReport` (report), `CrawledArticle` (crawl), `VerificationSession`, `VerificationLog` (verification).
+- Total 13 tabel, dimigrasikan per-modul via `module.Migrate()` → `AutoMigrate`.
+- **Database: MySQL 8.0** (driver `gorm.io/driver/mysql`), bukan PostgreSQL.
+- Wiring di `cmd/web/main.go`: region → report → verification → crawl (berurutan sesuai dependency).
 
-- [ ] `GET /api/v1/provinces` — list semua provinsi
-- [ ] `GET /api/v1/provinces/:id/cities` — list kota by provinsi
-- [ ] `GET /api/v1/cities/:id/districts` — list kecamatan by kota
-- [ ] `GET /api/v1/districts/:id/villages` — list kelurahan by kecamatan
-- [ ] Response format standar (JSON, pagination jika perlu)
-- [ ] Test: hit semua endpoint, pastikan data sesuai seed
+### 2. Seed Data
 
----
+- **Wilayah:** seeder parse SQL embedded (`database/seeders/regions`) berisi **seluruh Indonesia** (37 provinsi, 514 kabupaten/kota, dst.) — bukan hanya DKI Jakarta. PK memakai kode BPS (string).
+- **Kategori:** 4 kategori — `Sampah`, `Jalan Rusak`, `Jembatan Rusak`, `Bangunan Terbengkalai` — masing-masing dengan `search_keywords` (JSON) untuk query RSS crawler.
+- Seeder idempotent (`SeedIfEmpty`).
 
-## Step 4: Category Module — API Kategori
+### 3. Report Module (Core)
 
-**Branch:** `feat/category-module`
+Endpoint terdaftar di `report/route.go`:
 
-**Tujuan:** Endpoint API untuk frontend fetch daftar kategori (untuk filter di peta & form pelaporan).
+- `GET /api/reports/map` — data peta (bounding box `min_lat/max_lat/min_lng/max_lng` + filter `category_id/status/severity/source_type`; auto-filter `merged_into_id IS NULL`; limit 500).
+- `GET /api/reports/:id` — detail report + foto + konfirmasi + `related_reports`.
+- `POST /api/reports/analyze-photo` — CV classifier (upload foto → draft AI).
+- `POST /api/reports` — create report warga (reverse geocode → resolve village → promote foto → simpan).
+- `GET /api/categories` — list kategori.
 
-- [ ] `GET /api/v1/categories` — list semua kategori (id, name, slug, icon, color)
-- [ ] Test: hit endpoint, pastikan 5 kategori tampil
+### 4. News Crawler Module
 
----
+- Cron tiap 2 jam (`0 */2 * * *`) + langsung jalan saat startup + `POST /api/crawl/trigger` untuk manual.
+- Fetch Google News RSS per keyword `search_keywords` × region Jabodetabek.
+- LLM Gemini ekstraksi → geocode Nominatim → resolve village → validasi Jabodetabek → auto-create report `ai_news`.
+- Dedup by URL; rejected article disimpan untuk audit.
+- Detail lengkap: `SYSTEM-FLOW-CRAWLER.md`.
 
-## Step 5: Report Module — API Laporan (Core)
+### 5. CV Classifier (US-06)
 
-**Branch:** `feat/report-module`
+- Terintegrasi di `POST /api/reports/analyze-photo` (modul report, bukan modul terpisah).
+- Vision LLM Gemini (`gemini-3.5-flash-lite`) + guard berlapis (stempel timestamp kamera, relevansi, kategori terdaftar, lokasi terbaca, geocoding).
 
-**Tujuan:** CRUD laporan — ini modul inti Fixora. Frontend bisa submit laporan baru dan menampilkan data di peta.
+### 6. Duplicate Detection (US-07)
 
-- [ ] `POST /api/v1/reports` — create report baru (dengan upload foto)
-  - Input: foto (wajib), title, description (opsional), latitude, longitude, category_id
-  - Backend: reverse geocoding (Nominatim) → resolve village_id
-  - Backend: simpan foto ke storage → create record report_photos
-  - Response: report yang baru dibuat
-- [ ] `GET /api/v1/reports` — list reports (untuk peta)
-  - Filter: category_id, status, source_type, village/district/city, severity
-  - Response: list reports dengan foto primary, info wilayah
-  - Support pagination & bounding box (lat/lng range) untuk peta viewport
-- [ ] `GET /api/v1/reports/:id` — detail satu report
-  - Response: report lengkap + semua foto + info wilayah (JOIN ke 4 tabel)
-- [ ] Integrasi Nominatim reverse geocoding
-  - lat/lng → province, city, district, village → match ke tabel wilayah → set village_id
-  - Kalau gagal match → village_id NULL, simpan raw address text
-- [ ] Upload foto ke local storage / MinIO (configurable)
-- [ ] Test: create report via API, lalu GET dan pastikan tampil
+- Perceptual hash (`goimagehash`) foto primary + radius 100m + kategori sama.
+- Soft-merge via `reports.merged_into_id`; audit trail di `duplicate_reports`.
 
----
+### 7. Multi-Agent Verification (di luar rencana awal)
 
-## Step 6: News Crawler Module — AI Data Collector
-
-**Branch:** `feat/news-crawler`
-
-**Tujuan:** Cron job yang tarik berita infrastruktur dari RSS, LLM extract data, auto-create report. Ini yang bikin platform punya data tanpa nunggu warga lapor.
-
-- [ ] Setup cron job scheduler (berjalan tiap beberapa jam)
-- [ ] RSS feed fetcher — tarik artikel dari media (Detik, Kompas, Tempo, dll)
-- [ ] Deduplikasi URL — cek `crawled_articles.url` UNIQUE sebelum proses
-- [ ] LLM extraction — kirim konten berita ke LLM, minta structured output:
-  - `{ location, category, severity, title, description }`
-- [ ] Geocoding — convert lokasi teks → lat/lng (Nominatim)
-- [ ] Reverse geocoding → match village_id (sama seperti flow report)
-- [ ] Auto-create report dengan `source_type = 'ai_news'`
-- [ ] Update `crawled_articles.status` (pending → processed/rejected)
-- [ ] `GET /api/v1/crawled-articles` — list artikel (untuk monitoring/admin)
-- [ ] Test: jalankan crawler manual, pastikan artikel → report terbuat
+- Modul `verification` dengan 3 agent: advocate → skeptic → manager (debate + consensus).
+- Cron tiap 30 detik; endpoint `POST /api/crawl/verify/trigger/:reportId`, `POST /api/crawl/verify/retry/:sessionId`, `GET /api/crawl/verify/sessions/:reportId`.
+- Hanya `user_report` yang diverifikasi via LLM; `ai_news`/`gov_data` auto-approve (`verified`).
 
 ---
 
-## Step 7: CV Classifier & Severity Scoring
+## Yang Belum Selesai
 
-**Branch:** `feat/cv-classifier`
+### A. Region REST API (Step 3 rencana lama)
 
-**Tujuan:** Saat warga upload foto, AI otomatis klasifikasi kategori + skor severity.
+`region/route.go` **kosong** — belum ada endpoint:
 
-- [ ] Integrasi multimodal LLM API (vision)
-- [ ] Saat `POST /api/v1/reports`:
-  - Kirim foto ke LLM → dapat `{ category, severity, confidence }`
-  - Kalau confidence tinggi → auto-set category_id & severity
-  - Kalau confidence rendah → flag `status = 'pending_verification'` + perlu review
-- [ ] Test: upload foto jalan rusak, pastikan auto-classify benar
+- `GET /api/provinces`
+- `GET /api/provinces/:id/cities`
+- `GET /api/cities/:id/districts`
+- `GET /api/districts/:id/villages`
 
----
+Client `region-client.ResolveVillageByAddress` sudah ada dan dipakai report+crawler, tapi tidak ada controller/usecase untuk list wilayah.
 
-## Step 8: Duplicate Detection
+### B. Konfirmasi "Masih Begini" (US-04)
 
-**Branch:** `feat/duplicate-detection`
+Tabel `report_confirmations` + repository (`HasConfirmedByIP`, anti-spam 24 jam) + entity + `TotalConfirmations` di detail response sudah ada, tapi **belum ada endpoint/usecase** untuk membuat konfirmasi.
 
-**Tujuan:** Deteksi & merge laporan duplikat agar peta tidak penuh entri yang sama.
+### C. Gov Data Sync (US-08)
 
-- [ ] Generate perceptual hash saat foto diupload
-- [ ] Saat report baru masuk, cek:
-  - Perceptual hash similarity dengan foto existing
-  - Radius GPS (misal < 100m) + kategori sama + rentang waktu dekat
-- [ ] Kalau terdeteksi duplikat → set `merged_into_id` ke report induk (soft-merge)
-- [ ] Report yang di-merge tidak tampil di `GET /reports` (filter `WHERE merged_into_id IS NULL`)
-- [ ] Test: submit 2 report di lokasi sama dengan foto mirip, pastikan ter-merge
+Belum diimplementasikan sama sekali. `source_type: gov_data` didukung di enum/validasi tapi tidak ada pipeline penghasilnya. Lihat `SYSTEM-FLOW-GOV-SYNC.md`.
+
+### D. RAG Cross-Reference Anggaran (Fase 2)
+
+Belum ada. Tidak ada tabel `budget_items`, tidak ada pipeline RAG.
 
 ---
 
 ## Catatan Umum
 
-- **Arsitektur:** Clean Architecture / Modular Monolith (sesuai existing codebase)
-- **Setiap module** implement interface `Module` (`RegisterRoutes` + `Migrate`)
-- **API versioning:** `/api/v1/...`
-- **Error handling:** Standard response format dari `shared/response`
-- **Reverse geocoding:** Nominatim (OpenStreetMap, gratis) — dipakai di Step 5 & Step 6
+- **Arsitektur:** Modular Monolith (setiap modul implement `module.Module`: `Migrate()` + `RegisterRoutes()`).
+- **API versioning:** prefix `/api` (bukan `/api/v1`) — sesuai `main.go` `app.Group("/api")`.
+- **Error handling:** standar `dto.WebResponse[T]` + `dto.ApiErrorResponse` (error handler di `shared/config/fiber.go`).
+- **Reverse geocoding:** Nominatim (OpenStreetMap) — dipakai di report & crawler.
+- **Foto:** Cloudinary (staging → promote) + cleanup worker untuk orphan staging.
+- **LLM:** Gemini (`google_ai_studio`) untuk CV + ekstraksi berita; CommandCode (OpenAI-compatible) untuk verifikasi multi-agent.

@@ -1,30 +1,110 @@
 # Fixora — Backend
 
-Fixora (Infrastructure Neglect Tracker) adalah platform pelacakan akuntabilitas jangka panjang terhadap infrastruktur publik yang dibiarkan rusak. Backend ini dibangun menggunakan **Go (Golang)**, **Fiber**, **GORM**, dan **MySQL**.
+> **Fixora** adalah platform open source untuk melacak akuntabilitas jangka panjang terhadap infrastruktur publik yang dibiarkan rusak (jalan berlubang, jembatan rawan roboh, bangunan terbengkalai, sampah menumpuk).
+>
+> Backend ini dibangun dengan **Go (Golang)**, **Fiber**, **GORM**, dan **MySQL 8.0**, memakai pola **Modular Monolith** — satu aplikasi, tapi kode dipecah per modul yang terisolasi datanya dan hanya berkomunikasi lewat interface client.
+
+---
+
+## Daftar Isi
+
+1. [Apa yang Dikerjakan Backend Ini](#apa-yang-dikerjakan-backend-ini)
+2. [Teknologi](#teknologi)
+3. [Arsitektur](#arsitektur)
+4. [Persyaratan](#persyaratan)
+5. [Cara Menjalankan](#cara-menjalankan)
+6. [Konfigurasi](#konfigurasi)
+7. [Dokumentasi API (Swagger)](#dokumentasi-api-swagger)
+8. [Daftar Endpoint](#daftar-endpoint)
+9. [Cara Kerja (Flow)](#cara-kerja-flow)
+10. [Struktur Direktori](#struktur-direktori)
+
+---
+
+## Apa yang Dikerjakan Backend Ini
+
+Fixora punya dua jalur data yang berjalan paralel, keduanya tampil di peta yang sama:
+
+| Jalur | Sumber | Badge |
+|-------|--------|-------|
+| **Laporan manual warga** | Upload foto + lokasi, dianalisis AI, lalu diverifikasi | `user_report` |
+| **AI News Crawler** | Cron otonom menarik berita infrastruktur dari media, diekstrak LLM, dibuat jadi laporan otomatis | `ai_news` |
+
+Selain itu backend juga mengelola: kategori masalah, hierarki wilayah Indonesia, deteksi duplikat, dan verifikasi multi-agent untuk menjaga data tetap kredibel.
+
+### Modul yang sudah ada
+
+- **`region`** — hierarki wilayah (provinsi → kota → kecamatan → kelurahan) + resolve lokasi berdasarkan nama/alamat.
+- **`report`** — laporan warga (create/map/detail), kategori, analisis foto AI (CV classifier), deteksi duplikat.
+- **`crawl`** — AI News Crawler (RSS + LLM + geocoding + auto-create report).
+- **`verification`** — verifikasi multi-agent (advocate → skeptic → manager).
+
+### Belum diimplementasikan (roadmap)
+
+- REST API list wilayah (endpoint provinsi/kota/kecamatan/kelurahan).
+- Endpoint konfirmasi "masih begini" (tabel sudah ada, endpoint belum).
+- Government data sync (`gov_data`) & RAG cross-reference anggaran (Fase 2).
+
+Detail lengkap ada di `docs/PROGRESS.md` dan `docs/`.
+
+---
+
+## Teknologi
+
+| Layer | Teknologi |
+|-------|-----------|
+| Bahasa | Go 1.25 |
+| HTTP framework | Fiber v2 |
+| ORM | GORM (driver MySQL) |
+| Database | MySQL 8.0 (lokal) / TiDB Cloud (produksi) |
+| Config | Viper (`config.json` + env override) |
+| Validasi | go-playground/validator |
+| Logging | Logrus |
+| Scheduler | robfig/cron v3 |
+| RSS parsing | gofeed |
+| AI (CV + ekstraksi berita) | Google Gemini (`gemini-3.5-flash-lite`) |
+| AI (verifikasi multi-agent) | CommandCode (OpenAI-compatible, model `qwen/qwen3.7-flash`) |
+| Geocoding | Nominatim (OpenStreetMap, gratis) |
+| Penyimpanan foto | Cloudinary |
+| Deteksi duplikat foto | goimagehash (perceptual hash) |
+
+---
+
+## Arsitektur
+
+Pola **Modular Monolith**: satu binary/deployment unit, kode dipecah per modul.
+
+- **Data isolation** — tiap modul punya tabel sendiri, tanpa foreign key GORM lintas modul.
+- **Inter-module communication** — modul mengakses data modul lain hanya lewat interface `*-client` (mis. `report-client`, `region-client`, `verification-client`).
+- **Module contract** — tiap modul implement `module.Module` (`Migrate()` + `RegisterRoutes()`), di-wiring seragam di `cmd/web/main.go`.
+- **Layer** — `controller → usecase → repository → entity` + `model` (DTO) + `converter`.
+
+Urutan inisialisasi modul di `main.go` (sesuai dependency):
+
+```
+region → report → verification → crawl
+```
 
 ---
 
 ## Persyaratan
 
-- **Docker & Docker Compose**
+- **Go 1.25+** (jika jalan tanpa Docker)
+- **Docker & Docker Compose** (cara yang direkomendasikan)
 - **Git**
 
 ---
 
-## Cara Setup Lokal
+## Cara Menjalankan
 
-Untuk menjalankan backend ini secara lokal di mesin Anda, ikuti langkah-langkah berikut:
-
-### 1. Clone Repositori
+### Cara 1: Docker Compose (rekomendasi)
 
 ```bash
 git clone https://github.com/arttVinci/fixora-Backend.git
 cd fixora-Backend
 ```
 
-### 2. Siapkan Konfigurasi `.env`
-
-Salin template `.env.example` menjadi `.env` dan sesuaikan nilainya jika perlu:
+1. **Siapkan `.env`** (untuk variabel MySQL container):
 
 ```bash
 cp .env.example .env
@@ -40,558 +120,266 @@ MYSQL_PASSWORD=database_password
 DB_PORT_EXTERNAL=3306
 ```
 
-### 3. Siapkan Konfigurasi `config.json`
-
-Salin template `config.json.example` menjadi `config.json`:
+2. **Siapkan `config.json`** (untuk koneksi DB + API key AI):
 
 ```bash
 cp config.json.example config.json
 ```
 
-Untuk integrasi dengan Docker Compose, atur `config.json` pada bagian database host ke `fixora_mysql` serta sesuaikan kredensial dan API key:
-
-```json
-{
-  "app": {
-    "name": "fixora"
-  },
-  "web": {
-    "prefork": false,
-    "port": 8080
-  },
-  "log": {
-    "level": 6
-  },
-  "database": {
-    "username": "db_user",
-    "password": "database_password",
-    "host": "fixora_mysql",
-    "port": 3306,
-    "name": "database_name",
-    "pool": {
-      "idle": 10,
-      "max": 100,
-      "lifetime": 300
-    }
-  },
-  "jwt": {
-    "secret": "your_jwt_secret_here"
-  },
-  "group": {
-    "id": "fixora"
-  },
-  "google_ai_studio": {
-    "api_key": "YOUR_GEMINI_API_KEY"
-  }
-}
-```
-
-> [!IMPORTANT]
-> **Penting:** Pastikan nilai `username`, `password`, dan `name` di dalam `config.json` **selalu sama dan sesuai** dengan nilai `MYSQL_USER`, `MYSQL_PASSWORD`, dan `MYSQL_DATABASE` pada file `.env`.
->
-> Selain itu, pastikan `database.host` di `config.json` diatur ke **`fixora_mysql`** (bukan `localhost`). Jika tidak sesuai, aplikasi backend di container tidak akan bisa terhubung ke container database.
->
-> Isi juga `google_ai_studio.api_key` dengan API Key dari Google AI Studio untuk mengaktifkan fitur AI News Crawler.
-
-### 4. Jalankan dengan Docker Compose
-
-Gunakan perintah berikut untuk melakukan build dan menyalakan container:
+3. **Jalankan**:
 
 ```bash
-docker compose up --build -d
+docker compose -f docker-compose.dev.yml up --build -d
 ```
 
-Tunggu beberapa saat hingga container database MySQL siap (_ready for connections_) dan backend berjalan.
+Tunggu sampai MySQL siap (`ready for connections`) dan backend berjalan. Base URL default: **`http://127.0.0.1:8080`**.
+
+### Cara 2: Tanpa Docker (Go langsung)
+
+```bash
+# Siapkan config.json terlebih dahulu (lihat bagian Konfigurasi)
+go mod download
+go run ./cmd/web
+```
+
+> Pastikan MySQL sudah berjalan dan nilai `database.host` di `config.json` menunjuk ke host MySQL yang benar (`localhost` jika MySQL lokal).
 
 ---
 
-## Informasi Endpoint
+## Konfigurasi
 
-### Base URL
-
-Bila dijalankan secara lokal dengan konfigurasi default, Base URL API adalah:
-👉 **`http://127.0.0.1:8080`**
-
-### Daftar Endpoint
-
-#### Reports
-
-##### 1. Search Map Reports
-
-Mengambil data titik laporan infrastruktur untuk tampilan peta interaktif berdasarkan _bounding box_ koordinat.
-
-- **Method:** `GET`
-- **Path:** `/api/reports/map`
-- **Query Parameters:**
-
-| Parameter     | Tipe   | Wajib | Deskripsi                                                  |
-| ------------- | ------ | ----- | ---------------------------------------------------------- |
-| `min_lat`     | float  | Ya    | Latitude minimal                                           |
-| `max_lat`     | float  | Ya    | Latitude maksimal                                          |
-| `min_lng`     | float  | Ya    | Longitude minimal                                          |
-| `max_lng`     | float  | Ya    | Longitude maksimal                                         |
-| `category_id` | string | Tidak | Filter UUID Kategori                                       |
-| `status`      | string | Tidak | Filter Status (`pending_verification`, `verified`, `rejected`) |
-| `severity`    | string | Tidak | Filter Severity (`ringan`, `sedang`, `parah`)              |
-| `source_type` | string | Tidak | Filter Sumber (`user_report`, `ai_news`, `gov_data`)       |
-
-**Contoh URL Request:**
-
-```http
-GET http://127.0.0.1:8080/api/reports/map?min_lat=-7.8&max_lat=-6.2&min_lng=106.4&max_lng=108.8
-```
-
-**Contoh Response Payload:**
+Konfigurasi utama ada di `config.json` (dibaca Viper). Struktur lengkap:
 
 ```json
 {
-  "data": [
-    {
-      "id": "c9a7e2f1-4b6d-4e8a-9f3c-1a2b3c4d5e6f",
-      "title": "Jalan Rusak parah di Kota Bekasi",
-      "latitude": -6.2349858,
-      "longitude": 106.9945444,
-      "severity": "sedang",
-      "category_slug": "jalan-rusak",
-      "status": "pending_verification",
-      "photo_url": "https://res.cloudinary.com/fixora/image/upload/v1/reports/c9a7e2f1/primary.jpg",
-      "source": "ai_news"
-    }
-  ],
-  "message": "Berhasil menampilkan data peta",
-  "success": true
-}
-```
-
-##### 2. Get Report Detail
-
-Mengambil detail lengkap satu laporan infrastruktur berdasarkan ID.
-
-- **Method:** `GET`
-- **Path:** `/api/reports/:id`
-- **Path Parameters:**
-
-| Parameter | Tipe   | Wajib | Deskripsi        |
-| --------- | ------ | ----- | ---------------- |
-| `id`      | string | Ya    | Report ID (UUID) |
-
-**Struktur Response Data (`ReportDetailResponse`):**
-
-| Field | Tipe | Deskripsi |
-| ----- | ---- | --------- |
-| `id` | string | UUID unik laporan |
-| `title` | string | Judul laporan kerusakan infrastruktur |
-| `description` | string (opsional) | Deskripsi rinci kondisi masalah |
-| `latitude` | float | Titik koordinat garis lintang (-90 s/d 90) |
-| `longitude` | float | Titik koordinat garis bujur (-180 s/d 180) |
-| `address` | string (opsional) | Alamat lokasi masalah |
-| `severity` | string | Tingkat keparahan (`ringan`, `sedang`, `parah`) |
-| `status` | string | Status verifikasi (`pending_verification`, `verified`, `rejected`) |
-| `source` | string | Asal sumber data (`user_report`, `ai_news`, `gov_data`) |
-| `source_url` | string (opsional) | Tautan URL sumber berita asli (hadir jika `source` = `ai_news`) |
-| `category_name` | string | Nama kategori masalah (mis. `Jalan Rusak`, `Sampah`) |
-| `category_slug` | string | Slug kategori masalah (mis. `jalan-rusak`, `sampah`) |
-| `photo_url` | string (opsional) | URL foto utama masalah infrastruktur |
-| `additional_photos` | array of string (opsional) | Daftar URL foto tambahan pendukung |
-| `total_confirmations` | integer | Total konfirmasi "masih begini" dari pengguna |
-| `merged_into_id` | string (opsional) | UUID laporan induk jika laporan ini ditandai duplikat dan di-merge |
-| `first_reported_at` | string (ISO 8601) | Waktu pertama kali laporan dibuat atau berita dideteksi |
-| `last_confirmed_at` | string (ISO 8601, opsional) | Waktu konfirmasi kondisi terakhir dari pengguna |
-
-**Contoh URL Request:**
-
-```http
-GET http://127.0.0.1:8080/api/reports/c9a7e2f1-4b6d-4e8a-9f3c-1a2b3c4d5e6f
-```
-
-**Contoh Response Payload (Laporan Warga — `source: user_report`):**
-
-```json
-{
-  "data": {
-    "id": "c9a7e2f1-4b6d-4e8a-9f3c-1a2b3c4d5e6f",
-    "title": "Jalan Berlubang di Jl. Ahmad Yani Bekasi",
-    "description": "Lubang berdiameter 1 meter di jalur utama.",
-    "latitude": -6.2349858,
-    "longitude": 106.9945444,
-    "address": "Jl. Ahmad Yani, Bekasi Selatan",
-    "severity": "sedang",
-    "status": "pending_verification",
-    "source": "user_report",
-    "category_name": "Jalan Rusak",
-    "category_slug": "jalan-rusak",
-    "photo_url": "https://res.cloudinary.com/fixora/image/upload/v1/reports/c9a7e2f1/primary.jpg",
-    "additional_photos": [],
-    "total_confirmations": 3,
-    "first_reported_at": "2026-08-08T10:00:00Z",
-    "last_confirmed_at": "2026-08-15T14:30:00Z"
+  "app": { "name": "fixora" },
+  "web": { "prefork": false, "port": 8080 },
+  "log": { "level": 6 },
+  "database": {
+    "username": "db_user",
+    "password": "db_password",
+    "host": "fixora_mysql",
+    "port": 3306,
+    "name": "fixora_db",
+    "pool": { "idle": 10, "max": 100, "lifetime": 300 }
   },
-  "message": "Berhasil menampilkan detail laporan",
-  "success": true
-}
-```
-
-**Contoh Response Payload (Deteksi Berita AI — `source: ai_news` dengan `source_url`):**
-
-```json
-{
-  "data": {
-    "id": "e7b1a2f3-5c8d-4e9a-9f1c-2a3b4c5d6e7f",
-    "title": "Jembatan Rusak dan Amblas di Jalur Penghubung",
-    "description": "Sebagian badan jembatan amblas akibat tergerus aliran sungai deras.",
-    "latitude": -6.2412345,
-    "longitude": 106.9987654,
-    "address": "Jl. Raya Narogong, Rawalumbu, Kota Bekasi",
-    "severity": "parah",
-    "status": "verified",
-    "source": "ai_news",
-    "source_url": "https://megapolitan.kompas.com/read/2026/08/20/jembatan-amblas-bekasi",
-    "category_name": "Jembatan Rusak",
-    "category_slug": "jembatan-rusak",
-    "photo_url": "https://res.cloudinary.com/fixora/image/upload/v1/reports/e7b1a2f3/primary.jpg",
-    "additional_photos": [],
-    "total_confirmations": 5,
-    "first_reported_at": "2026-08-20T08:00:00Z",
-    "last_confirmed_at": "2026-08-22T09:15:00Z"
+  "jwt": { "secret": "your_jwt_secret" },
+  "google_ai_studio": { "api_key": "YOUR_GEMINI_API_KEY" },
+  "llm_provider": {
+    "base_url": "https://api.commandcode.ai/provider/v1/chat/completions",
+    "api_key": "YOUR_LLM_PROVIDER_API_KEY"
   },
-  "message": "Berhasil menampilkan detail laporan",
-  "success": true
-}
-```
-
-##### 3. Analyze Photo (CV Classifier)
-
-Upload foto masalah infrastruktur untuk mendapatkan draft otomatis (judul, deskripsi, kategori, severity) dari AI classifier. Endpoint ini digunakan sebelum membuat laporan agar form bisa di-prefill.
-
-- **Method:** `POST`
-- **Path:** `/api/reports/analyze-photo`
-- **Content-Type:** `multipart/form-data`
-- **Form Data:**
-
-| Field   | Tipe | Wajib | Deskripsi           |
-| ------- | ---- | ----- | ------------------- |
-| `photo` | file | Ya    | File foto (jpg/png) |
-
-**Contoh Response Payload:**
-
-```json
-{
-  "data": {
-    "session_id": "e4b6a2c8-9d1f-4c3e-8a7b-2f1d5c6e9a4b",
-    "photo_url": "https://res.cloudinary.com/fixora/image/upload/v1/staging/e4b6a2c8/primary.jpg",
-    "title": "Jalan Berlubang Besar di Area Perumahan",
-    "description": "Terlihat lubang jalan berdiameter sekitar 1 meter dengan kedalaman cukup signifikan di area jalan perumahan.",
-    "category": "jalan-rusak",
-    "severity": "sedang",
-    "is_relevant": true
-  },
-  "message": "Berhasil menganalisis foto",
-  "success": true
-}
-```
-
-Jika foto bukan infrastruktur rusak (screenshot, orang, dokumen, pemandangan, dsb.) atau
-kategori hasil analisis tidak terdaftar, endpoint tetap mengembalikan `200` tetapi dengan
-`is_relevant: false` dan `category`/`severity` kosong. Frontend wajib memblokir submit
-prefill ketika `is_relevant` bernilai `false`.
-
-##### 4. Create Report (Laporan Warga)
-
-- **Method:** `POST`
-- **Path:** `/api/reports/`
-- **Content-Type:** `application/json`
-- **Request Body:**
-
-| Field               | Tipe   | Wajib | Deskripsi                                       |
-| ------------------- | ------ | ----- | ----------------------------------------------- |
-| `category_id`       | string | Ya    | UUID kategori masalah                           |
-| `title`             | string | Ya    | Judul laporan (maks. 200 karakter)              |
-| `description`       | string | Tidak | Deskripsi detail masalah                        |
-| `latitude`          | float  | Ya    | Latitude lokasi (-90 s/d 90)                    |
-| `longitude`         | float  | Ya    | Longitude lokasi (-180 s/d 180)                 |
-| `address`           | string | Tidak | Alamat lokasi (maks. 500 karakter)              |
-| `severity`          | string | Ya    | Tingkat keparahan (`ringan`, `sedang`, `parah`) |
-| `staging_session_id` | string | Ya    | Session ID foto staging (dari endpoint `analyze-photo`) |
-| `reporter_email`    | string | Tidak | Email pelapor (opsional)                        |
-
-**Contoh Request Body:**
-
-```json
-{
-  "category_id": "550e8400-e29b-41d4-a716-446655440000",
-  "title": "Jalan Berlubang di Jl. Ahmad Yani Bekasi",
-  "description": "Lubang berdiameter 1 meter di jalur utama, membahayakan pengendara motor.",
-  "latitude": -6.2349858,
-  "longitude": 106.9945444,
-  "address": "Jl. Ahmad Yani, Bekasi Selatan",
-  "severity": "sedang",
-  "staging_session_id": "e4b6a2c8-9d1f-4c3e-8a7b-2f1d5c6e9a4b",
-  "reporter_email": "warga@example.com"
-}
-```
-
-**Contoh Response Payload (201 Created):**
-
-```json
-{
-  "data": {
-    "id": "d2f8b4a1-7c3e-4f9b-8a5d-6e2c9b0f1a3d",
-    "title": "Jalan Berlubang di Jl. Ahmad Yani Bekasi",
-    "description": "Lubang berdiameter 1 meter di jalur utama, membahayakan pengendara motor.",
-    "latitude": -6.2349858,
-    "longitude": 106.9945444,
-    "address": "Jl. Ahmad Yani, Bekasi Selatan",
-    "severity": "sedang",
-    "status": "pending_verification",
-    "source": "user_report",
-    "category_name": "Jalan Rusak",
-    "category_slug": "jalan-rusak",
-    "photo_url": "https://res.cloudinary.com/fixora/image/upload/v1/reports/d2f8b4a1/primary.jpg",
-    "additional_photos": [],
-    "total_confirmations": 0,
-    "first_reported_at": "2026-08-26T06:15:00Z"
-  },
-  "message": "Berhasil membuat laporan",
-  "success": true
-}
-```
-
----
-
-#### Categories
-
-##### 5. Get List Categories
-
-Mengambil daftar seluruh kategori masalah infrastruktur yang tersedia di platform.
-
-- **Method:** `GET`
-- **Path:** `/api/categories/`
-
-**Contoh URL Request:**
-
-```http
-GET http://127.0.0.1:8080/api/categories/
-```
-
-**Contoh Response Payload:**
-
-```json
-{
-  "data": [
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "name": "Sampah",
-      "slug": "sampah"
-    },
-    {
-      "id": "660f9500-f3ac-52e5-b827-557766550111",
-      "name": "Jalan Rusak",
-      "slug": "jalan-rusak"
-    },
-    {
-      "id": "770a0600-a4bd-63f6-c938-668877660222",
-      "name": "Jembatan Rusak",
-      "slug": "jembatan-rusak"
-    },
-    {
-      "id": "880b1700-b5ce-74a7-d049-779988770333",
-      "name": "Bangunan Terbengkalai",
-      "slug": "bangunan-terbengkalai"
-    }
-  ],
-  "message": "Berhasil menampilkan daftar kategori",
-  "success": true
-}
-```
-
----
-
-#### Crawl
-
-##### 6. Trigger AI News Crawler (Manual)
-
-Memicu proses AI News Crawler secara manual untuk mencari berita kerusakan infrastruktur di background.
-
-- **Method:** `POST`
-- **Path:** `/api/crawl/trigger`
-
-**Contoh Response Payload:**
-
-```json
-{
-  "data": null,
-  "message": "Crawler berhasil di-trigger, berjalan di background",
-  "success": true
-}
-```
-
----
-
-#### Verification
-
-##### 7. Trigger Verification
-
-Memicu proses verifikasi berlapis (multi-agent) untuk satu laporan. Mengembalikan sesi verifikasi yang aktif bila sudah ada, atau membuat sesi baru dengan status `pending`.
-
-- **Method:** `POST`
-- **Path:** `/api/crawl/verify/trigger/:reportId`
-- **Path Parameters:**
-
-| Parameter  | Tipe   | Wajib | Deskripsi |
-| ---------- | ------ | ----- | --------- |
-| `reportId` | string | Ya    | Report ID |
-
-**Contoh URL Request:**
-
-```http
-POST http://127.0.0.1:8080/api/crawl/verify/trigger/d2f8b4a1-7c3e-4f9b-8a5d-6e2c9b0f1a3d
-```
-
-**Contoh Response Payload:**
-
-```json
-{
-  "data": {
-    "id": "f3c9a5b2-8d4f-4a0c-9b6e-7f3d0c1a2b4e",
-    "report_id": "d2f8b4a1-7c3e-4f9b-8a5d-6e2c9b0f1a3d",
-    "status": "pending",
-    "logs": []
-  },
-  "message": "Berhasil memicu verifikasi",
-  "success": true
-}
-```
-
-##### 8. Retry Verification Session
-
-Mengulang sesi verifikasi yang gagal (status `error`). Sesi dikembalikan ke status `pending` dan field final di-reset.
-
-- **Method:** `POST`
-- **Path:** `/api/crawl/verify/retry/:sessionId`
-- **Path Parameters:**
-
-| Parameter   | Tipe   | Wajib | Deskripsi            |
-| ----------- | ------ | ----- | -------------------- |
-| `sessionId` | string | Ya    | Verification Session ID |
-
-**Contoh Response Payload:**
-
-```json
-{
-  "data": {
-    "id": "f3c9a5b2-8d4f-4a0c-9b6e-7f3d0c1a2b4e",
-    "report_id": "d2f8b4a1-7c3e-4f9b-8a5d-6e2c9b0f1a3d",
-    "status": "pending"
-  },
-  "message": "Berhasil mengulang verifikasi",
-  "success": true
-}
-```
-
-##### 9. Get Verification Sessions by Report
-
-Mengambil seluruh sesi verifikasi (beserta log agen) untuk satu laporan.
-
-- **Method:** `GET`
-- **Path:** `/api/crawl/verify/sessions/:reportId`
-- **Path Parameters:**
-
-| Parameter  | Tipe   | Wajib | Deskripsi |
-| ---------- | ------ | ----- | --------- |
-| `reportId` | string | Ya    | Report ID |
-
-**Contoh Response Payload:**
-
-```json
-{
-  "data": [
-    {
-      "id": "f3c9a5b2-8d4f-4a0c-9b6e-7f3d0c1a2b4e",
-      "report_id": "d2f8b4a1-7c3e-4f9b-8a5d-6e2c9b0f1a3d",
-      "status": "approved",
-      "final_verdict": true,
-      "final_category_slug": "jalan-rusak",
-      "final_severity": "sedang",
-      "final_reasoning": "Foto dan deskripsi konsisten dengan kerusakan jalan.",
-      "decided_by": "skeptic",
-      "started_at": "2026-08-26T06:15:05Z",
-      "completed_at": "2026-08-26T06:16:02Z",
-      "created_at": "2026-08-26T06:15:00Z",
-      "updated_at": "2026-08-26T06:16:02Z",
-      "logs": [
-        {
-          "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
-          "session_id": "f3c9a5b2-8d4f-4a0c-9b6e-7f3d0c1a2b4e",
-          "agent_role": "advocate",
-          "llm_provider": "gemini",
-          "llm_model": "gemini-3.5-flash-lite",
-          "verdict": true,
-          "confidence": 0.94,
-          "category_slug": "jalan-rusak",
-          "severity": "sedang",
-          "raw_argument": "Foto menunjukkan lubang jalan yang nyata.",
-          "prompt_used": "Kamu adalah agen advokat...",
-          "latency_ms": 8400,
-          "created_at": "2026-08-26T06:15:11Z"
-        }
-      ]
-    }
-  ],
-  "message": "Berhasil menampilkan sesi verifikasi",
-  "success": true
-}
-```
-
----
-
-## Standar Response API
-
-Setiap endpoint API selalu mengembalikan format JSON standar berikut:
-
-### Response Sukses:
-
-```json
-{
-  "data": { ... },
-  "message": "Pesan sukses opsional",
-  "success": true
-}
-```
-
-### Response dengan Pagination:
-
-```json
-{
-  "data": [ ... ],
-  "message": "Pesan sukses opsional",
-  "success": true,
-  "paging": {
-    "page": 1,
-    "size": 10,
-    "total_item": 25,
-    "total_page": 3
+  "cloudinary": {
+    "cloud_name": "YOUR_CLOUD_NAME",
+    "api_key": "YOUR_CLOUD_API_KEY",
+    "api_secret": "YOUR_CLOUD_API_SECRET"
   }
 }
 ```
 
-### Response Error:
+### Penjelasan tiap blok
+
+| Blok | Fungsi |
+|------|--------|
+| `web` | Port + prefork Fiber |
+| `database` | Koneksi MySQL/TiDB (username, password, host, port, name, pool) |
+| `jwt` | Secret (disediakan untuk kebutuhan auth mendatang) |
+| `google_ai_studio` | API key Gemini — untuk **CV classifier** (analisis foto) & **ekstraksi berita** (crawler) |
+| `llm_provider` | Base URL + API key CommandCode (OpenAI-compatible) — untuk **verifikasi multi-agent** |
+| `cloudinary` | Kredensial penyimpanan foto (staging → permanent) |
+
+### Override via environment variable
+
+Koneksi database bisa di-override lewat env var (diprioritaskan di atas `config.json`):
+
+| Env var | Menimpa |
+|---------|---------|
+| `DB_HOST` | `database.host` |
+| `DB_USER` | `database.username` |
+| `DB_PASSWORD` | `database.password` |
+| `DB_NAME` | `database.name` |
+| `DB_PORT` | `database.port` |
+
+> **Penting saat pakai Docker Compose:** nilai `username`/`password`/`name` di `config.json` harus sama dengan `MYSQL_USER`/`MYSQL_PASSWORD`/`MYSQL_DATABASE` di `.env`, dan `database.host` harus `fixora_mysql` (nama container), bukan `localhost`.
+
+### Geocoding (Nominatim)
+
+Nominatim (OpenStreetMap) dipakai untuk geocoding/reverse geocoding **tanpa API key**. Tidak perlu konfigurasi tambahan.
+
+---
+
+## Dokumentasi API (Swagger)
+
+Swagger UI dapat diakses di:
+
+👉 **https://api.portofy.net/swagger/index.html**
+
+Secara lokal (saat `docker compose up`), Swagger tersedia di:
+
+👉 **http://127.0.0.1:8080/swagger/index.html**
+
+---
+
+## Daftar Endpoint
+
+Base URL: `/api`
+
+### Reports
+
+| Method | Path | Deskripsi |
+|--------|------|-----------|
+| `GET` | `/reports/map` | Data peta berdasarkan bounding box (`min_lat`, `max_lat`, `min_lng`, `max_lng`) + filter `category_id`, `status`, `severity`, `source_type` |
+| `GET` | `/reports/:id` | Detail satu laporan (+ foto, konfirmasi, `related_reports`) |
+| `POST` | `/reports/analyze-photo` | Analisis foto (CV classifier) → draft otomatis (title, deskripsi, kategori, severity, lokasi) |
+| `POST` | `/reports` | Submit laporan warga (dengan `staging_session_id` dari `analyze-photo`) |
+
+### Categories
+
+| Method | Path | Deskripsi |
+|--------|------|-----------|
+| `GET` | `/categories` | Daftar kategori masalah |
+
+### Crawl
+
+| Method | Path | Deskripsi |
+|--------|------|-----------|
+| `POST` | `/crawl/trigger` | Trigger crawler manual (jalan di background) |
+
+### Verification
+
+| Method | Path | Deskripsi |
+|--------|------|-----------|
+| `POST` | `/crawl/verify/trigger/:reportId` | Trigger verifikasi untuk satu laporan |
+| `POST` | `/crawl/verify/retry/:sessionId` | Ulang sesi verifikasi yang error |
+| `GET` | `/crawl/verify/sessions/:reportId` | Daftar sesi verifikasi (+ log agent) untuk satu laporan |
+
+### Region
+
+> Belum ada endpoint REST (hanya client internal untuk resolve village). Lihat `docs/PROGRESS.md`.
+
+### Format response standar
+
+Setiap endpoint mengembalikan envelope seragam `WebResponse[T]`:
 
 ```json
 {
-  "data": null,
-  "message": "Pesan error yang jelas",
-  "success": false
+  "data": { },
+  "message": "Pesan opsional",
+  "success": true
 }
+```
+
+Error dikembalikan sebagai `ApiErrorResponse` (`message` + `statusCode`).
+
+---
+
+## Cara Kerja (Flow)
+
+### 1. Laporan Warga (`user_report`)
+
+```
+User upload foto
+  → POST /reports/analyze-photo
+  → Foto disimpan ke Cloudinary (staging)
+  → Gemini vision menganalisis → draft (title, deskripsi, kategori, severity, lokasi)
+  → Guard berlapis: wajib ada stempel timestamp kamera + lokasi terbaca + kategori terdaftar
+  → Response berisi draft + session_id
+
+User review/koreksi draft
+  → POST /reports (dengan staging_session_id)
+  → Reverse geocode lat/lng via Nominatim → resolve village_id
+  → Foto staging dipromosikan ke folder permanen Cloudinary
+  → Report disimpan dengan status pending_verification
+  → (async) deteksi duplikat + verifikasi multi-agent
+
+Verifikasi multi-agent (cron tiap 30 detik)
+  → advocate → skeptic → manager (LLM CommandCode)
+  → approved → status verified ; rejected → status rejected + alasan
+
+Report tayang di peta publik setelah status verified
+```
+
+### 2. AI News Crawler (`ai_news`)
+
+```
+Cron tiap 2 jam (+ langsung jalan saat startup, + POST /crawl/trigger manual)
+  → Ambil kategori + search_keywords dari DB
+  → Fetch Google News RSS per keyword × region Jabodetabek
+  → Filter artikel (buang opini/analisis/lama >30 hari)
+  → Dedup by URL (crawled_articles.url UNIQUE)
+
+Untuk tiap artikel unik:
+  → Ekstraksi LLM Gemini (title, kategori, lokasi, severity, is_relevant)
+  → Reject jika tidak relevan / kategori tidak dikenal / geocode gagal / di luar Jabodetabek
+  → Resolve village_id via region-client
+  → Auto-create report source_type=ai_news, status=verified (langsung tayang)
+
+Rejected article tetap disimpan (audit trail + mencegah re-crawl)
+```
+
+Detail lengkap: `docs/SYSTEM-FLOW-CRAWLER.md`, `docs/USER-FLOW-REPORT.md`.
+
+### 3. Deteksi Duplikat (soft-merge)
+
+```
+Setelah report dibuat:
+  → Cari report nearby (radius 100m, kategori sama, belum di-merge)
+  → Bandingkan perceptual hash foto primary
+  → Catat similarity ke duplicate_reports (audit trail)
+  → Merge hanya jika foto identik + sumber sama → set merged_into_id
+  → Report yang di-merge tidak tampil di /reports/map (filter merged_into_id IS NULL)
+```
+
+### 4. Background workers (cron)
+
+| Worker | Frekuensi | Tugas |
+|--------|-----------|-------|
+| AI News Crawler | tiap 2 jam | Tarik + proses berita |
+| Verifikasi | tiap 30 detik | Jalankan sesi verifikasi pending |
+| Staging cleanup | tiap 1 jam | Hapus foto staging orphan > TTL |
+
+---
+
+## Struktur Direktori
+
+```
+.
+├── cmd/web/main.go          # Entrypoint + wiring modul
+├── internal/
+│   ├── modules/
+│   │   ├── region/          # Hierarki wilayah + resolve village
+│   │   ├── region-client/   # Interface client region
+│   │   ├── report/          # Laporan, kategori, analisis foto, duplikat
+│   │   ├── report-client/   # Interface client report
+│   │   ├── crawl/           # AI News Crawler
+│   │   ├── crawl-client/    # Interface client crawl
+│   │   ├── verification/    # Verifikasi multi-agent
+│   │   └── verification-client/ # Interface client verifikasi
+│   └── shared/
+│       ├── config/          # Inisialisasi DB, Fiber, Viper, LLM, Cloudinary, dll.
+│       ├── client/          # Nominatim, Cloudinary, LLM (shared)
+│       ├── dto/             # WebResponse, LLM DTO
+│       ├── repository/      # Generic repository
+│       └── modules/         # Interface Module
+├── database/
+│   ├── seeders/             # Seed wilayah (SQL embedded)
+│   └── migrations/          # (placeholder)
+├── docs/                    # PRD, schema, flow, progress, swagger
+├── config.json.example      # Template konfigurasi
+├── .env.example             # Template env MySQL
+├── docker-compose.dev.yml   # Compose untuk development
+├── docker-compose.prod.yml  # Compose untuk production
+└── Dockerfile
 ```
 
 ---
 
-## Autentikasi
+## Dokumentasi Tambahan
 
-Endpoint yang diproteksi memerlukan token JWT. Kirimkan token pada header request:
-
-```http
-Authorization: Bearer <token_anda_dari_login>
-```
-
-Informasi teknis dan arsitektur lebih lanjut mengenai backend dapat dilihat pada dokumen di dalam folder `docs/` (`docs/fixora-prd`).
+- `docs/FIXORA-PRD.md` — Product Requirement Document.
+- `docs/DATABASE-SCHEMA.md` — Skema database aktual (13 tabel).
+- `docs/PROGRESS.md` — Status pengerjaan vs codebase.
+- `docs/SYSTEM-FLOW-CRAWLER.md` — Flow AI News Crawler.
+- `docs/USER-FLOW-REPORT.md` — Flow pelaporan warga.
+- `docs/SYSTEM-FLOW-GOV-SYNC.md` — Rancangan gov data sync (belum diimplementasikan).
+- `docs/git-convetional.md` — Aturan commit & branch workflow.
