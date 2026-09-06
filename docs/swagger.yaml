@@ -1,0 +1,490 @@
+basePath: /api
+definitions:
+  github_com_arttVinci_fixora-Backend_internal_modules_report_src_model.CategoryResponse:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+    type: object
+  github_com_arttVinci_fixora-Backend_internal_modules_report_src_model.CreateReportRequest:
+    properties:
+      address:
+        maxLength: 500
+        type: string
+      category_id:
+        type: string
+      description:
+        type: string
+      latitude:
+        maximum: 90
+        minimum: -90
+        type: number
+      longitude:
+        maximum: 180
+        minimum: -180
+        type: number
+      reporter_email:
+        maxLength: 150
+        type: string
+      severity:
+        enum:
+        - ringan
+        - sedang
+        - parah
+        type: string
+      staging_session_id:
+        type: string
+      title:
+        maxLength: 200
+        type: string
+    required:
+    - category_id
+    - latitude
+    - longitude
+    - severity
+    - staging_session_id
+    - title
+    type: object
+  github_com_arttVinci_fixora-Backend_internal_modules_report_src_model.IssueAnalysisResultResponse:
+    properties:
+      address:
+        type: string
+      category:
+        type: string
+      description:
+        type: string
+      is_relevant:
+        type: boolean
+      latitude:
+        type: number
+      location:
+        type: string
+      longitude:
+        type: number
+      photo_url:
+        type: string
+      reason:
+        type: string
+      session_id:
+        type: string
+      severity:
+        type: string
+      title:
+        type: string
+    type: object
+  github_com_arttVinci_fixora-Backend_internal_modules_report_src_model.ReportDetailResponse:
+    properties:
+      additional_photos:
+        items:
+          type: string
+        type: array
+      address:
+        type: string
+      category_name:
+        type: string
+      category_slug:
+        type: string
+      description:
+        type: string
+      first_reported_at:
+        type: string
+      id:
+        type: string
+      last_confirmed_at:
+        type: string
+      latitude:
+        type: number
+      longitude:
+        type: number
+      merged_into_id:
+        type: string
+      photo_url:
+        type: string
+      related_reports:
+        items:
+          $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_modules_report_src_model.ReportMapResponse'
+        type: array
+      severity:
+        type: string
+      source:
+        type: string
+      source_url:
+        type: string
+      status:
+        type: string
+      title:
+        type: string
+      total_confirmations:
+        type: integer
+    type: object
+  github_com_arttVinci_fixora-Backend_internal_modules_report_src_model.ReportMapResponse:
+    properties:
+      category_slug:
+        type: string
+      id:
+        type: string
+      latitude:
+        type: number
+      longitude:
+        type: number
+      photo_url:
+        type: string
+      severity:
+        type: string
+      source:
+        type: string
+      status:
+        type: string
+      title:
+        type: string
+    type: object
+  github_com_arttVinci_fixora-Backend_internal_shared_dto.PageMetadata:
+    properties:
+      page:
+        type: integer
+      size:
+        type: integer
+      total_item:
+        type: integer
+      total_page:
+        type: integer
+    type: object
+  github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-any:
+    properties:
+      data: {}
+      message:
+        type: string
+      paging:
+        $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.PageMetadata'
+      success:
+        type: boolean
+    type: object
+  ? github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-array_github_com_arttVinci_fixora-Backend_internal_modules_report_src_model_CategoryResponse
+  : properties:
+      data:
+        items:
+          $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_modules_report_src_model.CategoryResponse'
+        type: array
+      message:
+        type: string
+      paging:
+        $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.PageMetadata'
+      success:
+        type: boolean
+    type: object
+  ? github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-array_github_com_arttVinci_fixora-Backend_internal_modules_report_src_model_ReportMapResponse
+  : properties:
+      data:
+        items:
+          $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_modules_report_src_model.ReportMapResponse'
+        type: array
+      message:
+        type: string
+      paging:
+        $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.PageMetadata'
+      success:
+        type: boolean
+    type: object
+  ? github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-github_com_arttVinci_fixora-Backend_internal_modules_report_src_model_IssueAnalysisResultResponse
+  : properties:
+      data:
+        $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_modules_report_src_model.IssueAnalysisResultResponse'
+      message:
+        type: string
+      paging:
+        $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.PageMetadata'
+      success:
+        type: boolean
+    type: object
+  ? github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-github_com_arttVinci_fixora-Backend_internal_modules_report_src_model_ReportDetailResponse
+  : properties:
+      data:
+        $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_modules_report_src_model.ReportDetailResponse'
+      message:
+        type: string
+      paging:
+        $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.PageMetadata'
+      success:
+        type: boolean
+    type: object
+info:
+  contact:
+    email: support@fixora.id
+    name: Technical Support
+    url: http://www.swagger.io/support
+  description: API Documentation for Fixora — Infrastructure Neglect Tracker.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Fixora Backend API
+  version: "1.0"
+paths:
+  /categories:
+    get:
+      consumes:
+      - application/json
+      description: Get list of all infrastructure problem categories
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-array_github_com_arttVinci_fixora-Backend_internal_modules_report_src_model_CategoryResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-any'
+      summary: Get all categories
+      tags:
+      - categories
+  /crawl/trigger:
+    post:
+      consumes:
+      - application/json
+      description: Manually trigger a crawl run in the background
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-any'
+      summary: Trigger crawler manually
+      tags:
+      - Crawl
+  /crawl/verify/retry/{sessionId}:
+    post:
+      consumes:
+      - application/json
+      description: Retry error verification session
+      parameters:
+      - description: Session ID
+        in: path
+        name: sessionId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-any'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-any'
+      summary: Retry verification session
+      tags:
+      - Verification
+  /crawl/verify/sessions/{reportId}:
+    get:
+      consumes:
+      - application/json
+      description: Get verification sessions by report ID
+      parameters:
+      - description: Report ID
+        in: path
+        name: reportId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-any'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-any'
+      summary: Get verification sessions
+      tags:
+      - Verification
+  /crawl/verify/trigger/{reportId}:
+    post:
+      consumes:
+      - application/json
+      description: Trigger verification for report
+      parameters:
+      - description: Report ID
+        in: path
+        name: reportId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-any'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-any'
+      summary: Trigger verification
+      tags:
+      - Verification
+  /reports:
+    post:
+      consumes:
+      - application/json
+      description: Submit a new infrastructure problem report with photo URL, location,
+        and optional reporter email.
+      parameters:
+      - description: Create report payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_modules_report_src_model.CreateReportRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-github_com_arttVinci_fixora-Backend_internal_modules_report_src_model_ReportDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-any'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-any'
+      summary: Create report (user submission)
+      tags:
+      - reports
+  /reports/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get full detail of a single infrastructure report by ID
+      parameters:
+      - description: Report ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-github_com_arttVinci_fixora-Backend_internal_modules_report_src_model_ReportDetailResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-any'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-any'
+      summary: Get report detail
+      tags:
+      - reports
+  /reports/analyze-photo:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload an infrastructure problem photo to get AI-generated draft
+        (title, description, category, severity).
+      parameters:
+      - description: Problem photo
+        in: formData
+        name: photo
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-github_com_arttVinci_fixora-Backend_internal_modules_report_src_model_IssueAnalysisResultResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-any'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-any'
+      summary: Analyze uploaded photo (CV classifier)
+      tags:
+      - reports
+  /reports/map:
+    get:
+      consumes:
+      - application/json
+      description: Get report points for interactive map based on bounding box
+      parameters:
+      - description: Minimum Latitude
+        in: query
+        name: min_lat
+        required: true
+        type: number
+      - description: Maximum Latitude
+        in: query
+        name: max_lat
+        required: true
+        type: number
+      - description: Minimum Longitude
+        in: query
+        name: min_lng
+        required: true
+        type: number
+      - description: Maximum Longitude
+        in: query
+        name: max_lng
+        required: true
+        type: number
+      - description: Category ID Filter
+        in: query
+        name: category_id
+        type: string
+      - description: Status Filter
+        in: query
+        name: status
+        type: string
+      - description: Severity Filter
+        in: query
+        name: severity
+        type: string
+      - description: Source Type Filter
+        in: query
+        name: source_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-array_github_com_arttVinci_fixora-Backend_internal_modules_report_src_model_ReportMapResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-any'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_arttVinci_fixora-Backend_internal_shared_dto.WebResponse-any'
+      summary: Get interactive map data
+      tags:
+      - reports
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
