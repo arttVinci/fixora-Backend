@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  fixora_be:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fixora_be
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.json:/app/config.json
