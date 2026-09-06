@@ -12,12 +12,13 @@
 2. [Teknologi](#teknologi)
 3. [Arsitektur](#arsitektur)
 4. [Persyaratan](#persyaratan)
-5. [Cara Menjalankan](#cara-menjalankan)
+5. [Cara Setup Lokal](#cara-setup-lokal)
 6. [Konfigurasi](#konfigurasi)
 7. [Dokumentasi API (Swagger)](#dokumentasi-api-swagger)
 8. [Daftar Endpoint](#daftar-endpoint)
-9. [Cara Kerja (Flow)](#cara-kerja-flow)
-10. [Struktur Direktori](#struktur-direktori)
+9. [Standar Response API](#standar-response-api)
+10. [Cara Kerja (Flow)](#cara-kerja-flow)
+11. [Struktur Direktori](#struktur-direktori)
 
 ---
 
@@ -95,16 +96,20 @@ region → report → verification → crawl
 
 ---
 
-## Cara Menjalankan
+## Cara Setup Lokal
 
-### Cara 1: Docker Compose (rekomendasi)
+Untuk menjalankan backend ini secara lokal di mesin Anda, ikuti langkah-langkah berikut:
+
+### 1. Clone Repositori
 
 ```bash
 git clone https://github.com/arttVinci/fixora-Backend.git
 cd fixora-Backend
 ```
 
-1. **Siapkan `.env`** (untuk variabel MySQL container):
+### 2. Siapkan Konfigurasi .env
+
+Salin template `.env.example` menjadi `.env` dan sesuaikan nilainya jika perlu:
 
 ```bash
 cp .env.example .env
@@ -120,21 +125,72 @@ MYSQL_PASSWORD=database_password
 DB_PORT_EXTERNAL=3306
 ```
 
-2. **Siapkan `config.json`** (untuk koneksi DB + API key AI):
+### 3. Siapkan Konfigurasi config.json
+
+Salin template `config.json.example` menjadi `config.json`:
 
 ```bash
 cp config.json.example config.json
 ```
 
-3. **Jalankan**:
+Untuk integrasi dengan Docker Compose, atur `config.json` pada bagian database host ke `fixora_mysql` serta sesuaikan kredensial dan API key:
 
-```bash
-docker compose -f docker-compose.dev.yml up --build -d
+```json
+{
+  "app": {
+    "name": "fixora"
+  },
+  "web": {
+    "prefork": false,
+    "port": 8080
+  },
+  "log": {
+    "level": 6
+  },
+  "database": {
+    "username": "db_user",
+    "password": "database_password",
+    "host": "fixora_mysql",
+    "port": 3306,
+    "name": "database_name",
+    "pool": {
+      "idle": 10,
+      "max": 100,
+      "lifetime": 300
+    }
+  },
+  "jwt": {
+    "secret": "your_jwt_secret_here"
+  },
+  "group": {
+    "id": "fixora"
+  },
+  "google_ai_studio": {
+    "api_key": "YOUR_GEMINI_API_KEY"
+  }
+}
 ```
 
-Tunggu sampai MySQL siap (`ready for connections`) dan backend berjalan. Base URL default: **`http://127.0.0.1:8080`**.
+> [!IMPORTANT]
+> **Penting:** Pastikan nilai `username`, `password`, dan `name` di dalam `config.json` selalu sama dan sesuai dengan nilai `MYSQL_USER`, `MYSQL_PASSWORD`, dan `MYSQL_DATABASE` pada file `.env`.
+>
+> Selain itu, pastikan `database.host` di `config.json` diatur ke `fixora_mysql` (bukan `localhost`). Jika tidak sesuai, aplikasi backend di container tidak akan bisa terhubung ke container database.
+>
+> Isi juga `google_ai_studio.api_key` dengan API Key dari Google AI Studio untuk mengaktifkan fitur AI News Crawler.
 
-### Cara 2: Tanpa Docker (Go langsung)
+### 4. Jalankan dengan Docker Compose
+
+Gunakan perintah berikut untuk melakukan build dan menyalakan container:
+
+```bash
+docker compose up --build -d
+# atau jika file compose development ditentukan spesifik:
+# docker compose -f docker-compose.dev.yml up --build -d
+```
+
+Tunggu beberapa saat hingga container database MySQL siap (*ready for connections*) dan backend berjalan. Base URL default: **`http://127.0.0.1:8080`**.
+
+### Opsi Alternatif: Tanpa Docker (Go langsung)
 
 ```bash
 # Siapkan config.json terlebih dahulu (lihat bagian Konfigurasi)
@@ -254,19 +310,47 @@ Base URL: `/api`
 
 > Belum ada endpoint REST (hanya client internal untuk resolve village). Lihat `docs/PROGRESS.md`.
 
-### Format response standar
+---
 
-Setiap endpoint mengembalikan envelope seragam `WebResponse[T]`:
+## Standar Response API
+
+Setiap endpoint API selalu mengembalikan format JSON standar berikut:
+
+**Response Sukses:**
 
 ```json
 {
-  "data": {},
-  "message": "Pesan opsional",
+  "data": { ... },
+  "message": "Pesan sukses opsional",
   "success": true
 }
 ```
 
-Error dikembalikan sebagai `ApiErrorResponse` (`message` + `statusCode`).
+**Response dengan Pagination:**
+
+```json
+{
+  "data": [ ... ],
+  "message": "Pesan sukses opsional",
+  "success": true,
+  "paging": {
+    "page": 1,
+    "size": 10,
+    "total_item": 25,
+    "total_page": 3
+  }
+}
+```
+
+**Response Error:**
+
+```json
+{
+  "data": null,
+  "message": "Pesan error yang jelas",
+  "success": false
+}
+```
 
 ---
 
